@@ -57,6 +57,16 @@ class CommitParserTest(unittest.TestCase):
         self.assertIsNone(commit.type)
         self.assertEqual(commit.subject, "Initial project scaffold")
 
+    def test_parse_git_log_keeps_empty_body_field_separator(self) -> None:
+        raw = "abcdef1\x1ffeat(sms): decode PDU\x1f\x1e\n1234567\x1ffix: handle timeout\x1fbody\x1e"
+
+        commits = release.parse_git_log(raw)
+
+        self.assertEqual([commit.subject for commit in commits], ["fix: handle timeout", "feat(sms): decode PDU"])
+        self.assertEqual(commits[1].type, "feat")
+        self.assertEqual(commits[1].scope, "sms")
+        self.assertEqual(commits[1].body, "")
+
 
 class RecommendedBumpTest(unittest.TestCase):
     def test_first_release_from_zero_defaults_to_minor(self) -> None:
