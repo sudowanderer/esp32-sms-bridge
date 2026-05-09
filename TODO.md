@@ -258,12 +258,12 @@ TODO：
 
 TODO：
 
-- [ ] 实现 HTTP POST JSON
+- [x] 实现 HTTP POST JSON
 - [ ] 实现 GET URL 参数模式
-- [ ] 实现每通道超时
-- [ ] 实现失败重试
-- [ ] 实现指数退避
-- [ ] 记录 HTTP code 和错误原因
+- [x] 实现每通道超时
+- [x] 实现失败重试
+- [x] 实现指数退避
+- [x] 记录 HTTP code 和错误原因
 - [ ] 一个通道失败不影响其他通道
 
 ### `web_server`
@@ -383,10 +383,10 @@ TODO：
 ### Phase 3：HTTP 转发
 
 - [x] 实现短信 RAM 队列
-- [ ] 实现 HTTP POST JSON
-- [ ] 设置 HTTP 超时
-- [ ] 转发成功后标记状态
-- [ ] 转发失败后重试
+- [x] 实现 HTTP POST JSON
+- [x] 设置 HTTP 超时
+- [x] 转发成功后标记状态
+- [x] 转发失败后重试
 - [ ] Web 查看队列状态
 
 ### Phase 4：Web 后台

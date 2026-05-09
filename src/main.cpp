@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include "forwarder_http.h"
 #include "modem_at.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
@@ -127,6 +128,7 @@ void setup() {
   smsReceiverBegin();
   smsQueueBegin();
   wifiManagerBegin();
+  forwarderHttpBegin();
   smsReceiverSetCallback(handleSmsReceived, nullptr);
   smsReceiverSetErrorCallback(printSmsError, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
@@ -137,6 +139,7 @@ void loop() {
   modemAtPoll();
   smsReceiverPoll(millis());
   wifiManagerPoll(millis());
+  forwarderHttpPoll(millis());
 
   const uint32_t now = millis();
   if (now - lastLogMs >= kLogIntervalMs) {
@@ -150,11 +153,23 @@ void loop() {
     Serial.print(modemAtIsBusy() ? "yes" : "no");
     Serial.print(" modem_queue_depth=");
     Serial.print(modemAtQueueDepth());
+    Serial.print(" sms_queue_pending=");
+    Serial.print(smsQueuePendingCount());
     Serial.print(" wifi_status=");
     Serial.print(wifiManagerStatusName());
     if (wifiManagerIsConnected()) {
       Serial.print(" wifi_ip=");
       Serial.print(wifiManagerLocalIp());
+    }
+    Serial.print(" forwarder_http_status=");
+    Serial.print(forwarderHttpStatusName());
+    if (forwarderHttpLastCode() != 0) {
+      Serial.print(" forwarder_http_code=");
+      Serial.print(forwarderHttpLastCode());
+    }
+    if (forwarderHttpLastError()[0] != '\0') {
+      Serial.print(" forwarder_http_error=");
+      Serial.print(forwarderHttpLastError());
     }
     Serial.println();
   }
