@@ -126,6 +126,7 @@ python3 scripts/release.py --bump patch
 python3 scripts/release.py --bump minor
 python3 scripts/release.py --bump major
 python3 scripts/release.py --bump auto --push
+python3 scripts/release.py --bump auto --push --github-release
 ```
 
 Behavior:
@@ -134,6 +135,8 @@ Behavior:
 - `--bump auto` chooses the next version from commit messages.
 - `--bump patch|minor|major` forces the release type.
 - `--push` pushes `main` and the release tag to `origin`.
+- `--github-release` creates a GitHub Release page with the generated notes and
+  firmware asset. It requires `--push`.
 
 The script must refuse to release if:
 
@@ -213,6 +216,12 @@ A successful release creates:
    python3 scripts/release.py --bump auto --push
    ```
 
+   To also publish the GitHub Release page and upload the firmware binary:
+
+   ```bash
+   python3 scripts/release.py --bump auto --push --github-release
+   ```
+
 ## Hardware Release Notes
 
 A release tag means the code built successfully and native tests passed.
@@ -231,24 +240,31 @@ Record hardware validation results manually in the release notes when needed.
 
 ## GitHub Release Page
 
-The first release tooling version creates and pushes Git tags, but it does not
-create GitHub Release pages automatically.
+GitHub Release publishing is optional and requires GitHub CLI:
 
-GitHub Release notes should initially be copied from the matching
-`CHANGELOG.md` entry for the tag. For example, the GitHub Release page for
-`v0.1.0` should use the `## [0.1.0]` changelog section as its release notes.
+```bash
+gh auth login
+```
 
-A future script extension may add:
+Create the release commit, push `main`, push the tag, create the GitHub Release
+page, and upload the firmware binary with:
 
 ```bash
 python3 scripts/release.py --bump auto --push --github-release
 ```
 
-That extension should use GitHub CLI and reuse the generated changelog entry:
+The GitHub Release notes are generated from the same changelog entry inserted
+into `CHANGELOG.md`. The script does not upload `CHANGELOG.md` as a separate
+asset.
 
-```bash
-gh release create v0.1.0 --title "v0.1.0" --notes-file <notes-file>
+The uploaded firmware asset is named with the release version, for example:
+
+```text
+firmware-v0.1.0.bin
 ```
+
+Internally the script uses `gh release create --verify-tag` so GitHub CLI will
+fail instead of creating a release from a tag that has not been pushed.
 
 ## Notes for AI Agents
 

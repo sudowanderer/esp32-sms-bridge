@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import argparse
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 import release
 
@@ -139,6 +143,55 @@ class ChangelogTest(unittest.TestCase):
         self.assertIn("- sms: decode PDU (1111111)", entry)
         self.assertIn("### Bug Fixes", entry)
         self.assertIn("- modem: handle timeout (2222222)", entry)
+
+
+class GithubReleaseTest(unittest.TestCase):
+    def test_github_release_requires_push(self) -> None:
+        args = argparse.Namespace(github_release=True, push=False)
+
+        with self.assertRaises(release.ReleaseError):
+            release.validate_args(args)
+
+    def test_github_release_is_allowed_with_push(self) -> None:
+        args = argparse.Namespace(github_release=True, push=True)
+
+        release.validate_args(args)
+
+    def test_build_github_release_command_uses_notes_and_firmware_asset(self) -> None:
+        command = release.build_github_release_command(
+            "v0.1.0",
+            Path(".pio/build/esp32-c3-devkitm-1/firmware.bin"),
+            Path("/tmp/release-notes.md"),
+        )
+
+        self.assertEqual(command[0:4], ["gh", "release", "create", "v0.1.0"])
+        self.assertIn(".pio/build/esp32-c3-devkitm-1/firmware.bin#firmware-v0.1.0.bin", command)
+        self.assertIn("--title", command)
+        self.assertIn("v0.1.0", command)
+        self.assertIn("--notes-file", command)
+        self.assertIn("/tmp/release-notes.md", command)
+        self.assertIn("--verify-tag", command)
+
+    def test_create_github_release_writes_changelog_entry_to_notes_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            firmware_path = Path(tmp_dir) / "firmware.bin"
+            firmware_path.write_bytes(b"firmware")
+            entry = release.render_changelog_entry(
+                release.Version(0, 1, 0),
+                [release.Commit.parse("1111111", "feat(sms): decode PDU", "")],
+            )
+            captured = {}
+
+            def fake_run_stream(command: list[str]) -> None:
+                notes_index = command.index("--notes-file") + 1
+                captured["command"] = command
+                captured["notes"] = Path(command[notes_index]).read_text(encoding="utf-8")
+
+            with mock.patch.object(release, "run_stream", side_effect=fake_run_stream):
+                release.create_github_release("v0.1.0", entry, firmware_path=firmware_path)
+
+            self.assertEqual(captured["notes"], entry)
+            self.assertIn(f"{firmware_path}#firmware-v0.1.0.bin", captured["command"])
 
 
 if __name__ == "__main__":
