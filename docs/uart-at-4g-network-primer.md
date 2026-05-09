@@ -284,7 +284,7 @@ pdu.getConcatInfo()
 
 ```text
 1. ESP32C3 上电
-2. ESP32C3 拉 GPIO5，重启 ML307R
+2. ESP32C3 初始化 UART
 3. ESP32C3 通过 UART 发送 AT
 4. ML307R 返回 OK
 5. ESP32C3 设置短信模式：
@@ -298,6 +298,12 @@ pdu.getConcatInfo()
 9. ESP32C3 解码 PDU
 10. ESP32C3 通过 WiFi 或 4G 模块网络能力转发短信
 ```
+
+当前集成板实测说明：
+
+- 板上的 `PWR D5` 红灯是电源指示，`NET D1` 蓝灯是 ML307R 网络状态指示，不是 ESP32 应用代码直接控制的 LED。
+- 旧代码中 `GPIO5` 控制 ML307R EN 的假设在当前集成板上不成立；`GPIO5` 拉低期间 ML307R 仍能响应 `AT -> OK`。
+- ESP32 软件重启只能重启 ESP32 自身，不能给 USB 供电的整板或 ML307R 做物理断电重启。
 
 关键点：
 
