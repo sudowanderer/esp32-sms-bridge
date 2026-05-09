@@ -1,6 +1,8 @@
 .pio/
 .vscode/
 .idea/
+__pycache__/
+*.pyc
 
 *.swp
 *.swo
