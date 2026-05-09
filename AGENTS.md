@@ -76,6 +76,15 @@ Before release:
 - Run at least one hardware smoke test.
 - For stable releases, run 24-72 hour soak test.
 
+## Release Rules
+
+- Follow `docs/release-process.md` for versioning, changelog, release commits, and Git tags.
+- Use Semantic Versioning with `vX.Y.Z` Git tags.
+- Use Conventional Commits for commit messages so the release script can generate `CHANGELOG.md`.
+- Do not create release commits from feature branches.
+- Do not rewrite existing release tags.
+- Do not release with failing native tests or failing firmware builds.
+
 ## Web UI Rules
 
 - Keep Web UI lightweight and device-admin oriented.
@@ -94,6 +103,7 @@ Before release:
 ## Documentation Rules
 
 - Keep hardware assumptions documented.
+- Keep release process changes documented in `docs/release-process.md`.
 - Document every AT command used and why it is used.
 - Update docs when pin mapping, modem behavior, queue policy, or recovery policy changes.
 
