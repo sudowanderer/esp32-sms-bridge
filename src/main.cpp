@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "modem_at.h"
+#include "sms_queue.h"
 #include "sms_receiver.h"
 
 static constexpr uint32_t kLogIntervalMs = 1000;
@@ -37,10 +38,12 @@ static void printAtResult(ModemAtResult result, const char* response, void* user
   }
 }
 
-static void printSms(const SmsMessage& message, void* userData) {
-  (void)userData;
-
+static void printSmsDebug(const SmsMessage& message, bool enqueued) {
   Serial.println("sms_received_begin");
+  Serial.print("sms_queue=");
+  Serial.println(enqueued ? "enqueued" : "full");
+  Serial.print("sms_queue_depth=");
+  Serial.println(smsQueueDepth());
   Serial.print("sms_sender=");
   Serial.println(message.sender);
   Serial.print("sms_timestamp=");
@@ -59,6 +62,14 @@ static void printSms(const SmsMessage& message, void* userData) {
     Serial.println("sms_concat_note=v0_detect_only_no_merge");
   }
   Serial.println("sms_received_end");
+}
+
+static void handleSmsReceived(const SmsMessage& message, void* userData) {
+  (void)userData;
+
+  const uint32_t now = millis();
+  const bool enqueued = smsQueueEnqueue(message, now);
+  printSmsDebug(message, enqueued);
 }
 
 static void printSmsError(const char* reason, const char* rawLine, void* userData) {
@@ -113,7 +124,8 @@ void setup() {
 
   modemAtBegin();
   smsReceiverBegin();
-  smsReceiverSetCallback(printSms, nullptr);
+  smsQueueBegin();
+  smsReceiverSetCallback(handleSmsReceived, nullptr);
   smsReceiverSetErrorCallback(printSmsError, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
   submitStartupCommands();
