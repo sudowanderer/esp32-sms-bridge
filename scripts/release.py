@@ -14,6 +14,7 @@ import datetime as _dt
 import re
 import subprocess
 import sys
+import tempfile
 from collections import OrderedDict
 from pathlib import Path
 
@@ -23,6 +24,7 @@ VERSION_FILE = ROOT / "VERSION"
 CHANGELOG_FILE = ROOT / "CHANGELOG.md"
 CHANGELOG_MARKER = "<!-- releases -->"
 TAG_PATTERN = "v[0-9]*"
+FIRMWARE_BIN = ROOT / ".pio" / "build" / "esp32-c3-devkitm-1" / "firmware.bin"
 COMMIT_RE = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?: (?P<summary>.+)$"
 )
@@ -286,6 +288,33 @@ def create_release(next_version: Version, entry: str, *, push: bool) -> None:
         git(["push", "origin", tag])
 
 
+def build_github_release_command(tag: str, firmware_path: Path, notes_path: Path) -> list[str]:
+    version = tag.removeprefix("v")
+    asset = f"{firmware_path}#firmware-v{version}.bin"
+    return [
+        "gh",
+        "release",
+        "create",
+        tag,
+        asset,
+        "--title",
+        tag,
+        "--notes-file",
+        str(notes_path),
+        "--verify-tag",
+    ]
+
+
+def create_github_release(tag: str, entry: str, *, firmware_path: Path = FIRMWARE_BIN) -> None:
+    if not firmware_path.exists():
+        raise ReleaseError(f"firmware asset not found: {firmware_path}")
+
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md") as notes_file:
+        notes_file.write(entry)
+        notes_file.flush()
+        run_stream(build_github_release_command(tag, firmware_path, Path(notes_file.name)))
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create a local SemVer firmware release.")
     parser.add_argument(
@@ -304,13 +333,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Push main and the release tag after creating the release.",
     )
+    parser.add_argument(
+        "--github-release",
+        action="store_true",
+        help="Create a GitHub Release with the generated notes and firmware asset. Requires --push.",
+    )
     return parser.parse_args(argv)
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    if args.github_release and not args.push:
+        raise ReleaseError("--github-release requires --push")
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
 
     try:
+        validate_args(args)
         ensure_release_ready()
 
         tag = latest_release_tag()
@@ -343,6 +383,10 @@ def main(argv: list[str]) -> int:
         print(f"created release {next_tag}")
         if args.push:
             print(f"pushed main and {next_tag}")
+        if args.github_release:
+            print(f"creating GitHub Release {next_tag}...")
+            create_github_release(next_tag, entry)
+            print(f"created GitHub Release {next_tag}")
         return 0
     except ReleaseError as exc:
         print(f"release error: {exc}", file=sys.stderr)
