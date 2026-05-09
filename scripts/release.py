@@ -102,7 +102,7 @@ class ReleaseError(Exception):
     pass
 
 
-def run(args: list[str], *, check: bool = True) -> str:
+def run(args: list[str], *, check: bool = True, strip: bool = True) -> str:
     result = subprocess.run(
         args,
         cwd=ROOT,
@@ -114,7 +114,7 @@ def run(args: list[str], *, check: bool = True) -> str:
     if check and result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip()
         raise ReleaseError(f"{' '.join(args)} failed: {message}")
-    return result.stdout.strip()
+    return result.stdout.strip() if strip else result.stdout
 
 
 def run_stream(args: list[str]) -> None:
@@ -165,11 +165,15 @@ def tag_exists(tag: str) -> bool:
 
 def read_commits(since_tag: str | None) -> list[Commit]:
     revision_range = f"{since_tag}..HEAD" if since_tag else "HEAD"
-    raw = git(["log", "--pretty=format:%H%x1f%s%x1f%b%x1e", revision_range])
+    raw = run(["git", "log", "--pretty=format:%H%x1f%s%x1f%b%x1e", revision_range], strip=False)
+    return parse_git_log(raw)
+
+
+def parse_git_log(raw: str) -> list[Commit]:
     commits: list[Commit] = []
 
     for record in raw.split("\x1e"):
-        record = record.strip()
+        record = record.strip("\n")
         if not record:
             continue
         parts = record.split("\x1f", 2)
