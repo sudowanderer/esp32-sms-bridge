@@ -3,6 +3,7 @@
 #include "modem_at.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
+#include "wifi_manager.h"
 
 static constexpr uint32_t kLogIntervalMs = 1000;
 static constexpr uint32_t kCommandTimeoutMs = 3000;
@@ -125,6 +126,7 @@ void setup() {
   modemAtBegin();
   smsReceiverBegin();
   smsQueueBegin();
+  wifiManagerBegin();
   smsReceiverSetCallback(handleSmsReceived, nullptr);
   smsReceiverSetErrorCallback(printSmsError, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
@@ -134,6 +136,7 @@ void setup() {
 void loop() {
   modemAtPoll();
   smsReceiverPoll(millis());
+  wifiManagerPoll(millis());
 
   const uint32_t now = millis();
   if (now - lastLogMs >= kLogIntervalMs) {
@@ -146,6 +149,13 @@ void loop() {
     Serial.print(" modem_busy=");
     Serial.print(modemAtIsBusy() ? "yes" : "no");
     Serial.print(" modem_queue_depth=");
-    Serial.println(modemAtQueueDepth());
+    Serial.print(modemAtQueueDepth());
+    Serial.print(" wifi_status=");
+    Serial.print(wifiManagerStatusName());
+    if (wifiManagerIsConnected()) {
+      Serial.print(" wifi_ip=");
+      Serial.print(wifiManagerLocalIp());
+    }
+    Serial.println();
   }
 }

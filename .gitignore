@@ -9,3 +9,4 @@ __pycache__/
 .DS_Store
 
 compile_commands.json
+include/local_wifi_config.h
