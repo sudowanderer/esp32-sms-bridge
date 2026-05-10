@@ -1,5 +1,6 @@
 #include "web_server.h"
 
+#include "config_store.h"
 #include "forwarder_http.h"
 #include "logger.h"
 #include "modem_at.h"
@@ -21,6 +22,19 @@ static void sendJsonError(int code, const char* error) {
   char response[96];
   snprintf(response, sizeof(response), "{\"error\":\"%s\"}", error != nullptr ? error : "unknown");
   server.send(code, "application/json", response);
+}
+
+static const char* configParseErrorName(WebConfigParseResult result) {
+  switch (result) {
+    case WebConfigParseResult::Ok:
+      return "";
+    case WebConfigParseResult::InvalidJson:
+      return "invalid_json";
+    case WebConfigParseResult::ValueTooLong:
+      return "value_too_long";
+  }
+
+  return "invalid_config";
 }
 
 static uint16_t requestedLimit(uint16_t defaultLimit, uint16_t maxLimit) {
@@ -129,6 +143,42 @@ static void handleQueue() {
   server.sendContent("");
 }
 
+static void handleConfigGet() {
+  char response[512];
+  if (!webBuildConfigJson(configStoreGet(), response, sizeof(response))) {
+    sendJsonError(500, "config_json_too_large");
+    return;
+  }
+
+  sendJsonBuffer(response);
+}
+
+static void handleConfigSave() {
+  const String body = server.arg("plain");
+  DeviceConfig config = configStoreGet();
+  const WebConfigParseResult parseResult = webParseConfigSaveJson(body.c_str(), config);
+  if (parseResult != WebConfigParseResult::Ok) {
+    logWarn("web_config_status=invalid_request");
+    sendJsonError(400, configParseErrorName(parseResult));
+    return;
+  }
+
+  if (!configStoreSave(config)) {
+    logError("web_config_status=save_failed");
+    sendJsonError(500, "config_save_failed");
+    return;
+  }
+
+  logInfo("web_config_status=saved");
+  char response[512];
+  if (!webBuildConfigJson(configStoreGet(), response, sizeof(response))) {
+    sendJsonError(500, "config_json_too_large");
+    return;
+  }
+
+  sendJsonBuffer(response);
+}
+
 void webServerBegin() {
   if (started) {
     return;
@@ -137,6 +187,8 @@ void webServerBegin() {
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/logs", HTTP_GET, handleLogs);
   server.on("/api/queue", HTTP_GET, handleQueue);
+  server.on("/api/config", HTTP_GET, handleConfigGet);
+  server.on("/api/config/save", HTTP_POST, handleConfigSave);
   server.onNotFound([]() {
     sendJsonError(404, "not_found");
   });

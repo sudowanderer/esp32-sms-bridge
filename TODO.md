@@ -300,7 +300,7 @@ TODO：
 - [x] 实现基础 WebServer
 - [ ] 实现 Basic Auth
 - [x] 实现状态 API
-- [ ] 实现配置 API
+- [x] 实现配置 API
 - [x] 实现日志 API
 - [ ] 实现轻量 CSS
 - [ ] 避免 C++ 中大量拼接 HTML
@@ -396,7 +396,7 @@ TODO：
 - [ ] 实现配置页
 - [ ] 实现 WiFi 配网页
 - [ ] 实现 HTTP 推送配置
-- [ ] 配置保存到 NVS
+- [x] 配置保存到 NVS
 - [ ] 页面采用 LuCI-like 轻量 CSS
 
 ### Phase 5：长期稳定性
