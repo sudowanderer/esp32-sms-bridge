@@ -21,7 +21,7 @@ struct PushHttpRequest {
   PushHttpMethod method;
   char url[256];
   char contentType[32];
-  char body[768];
+  char body[4096];
   uint32_t timeoutMs;
 };
 

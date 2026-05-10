@@ -29,6 +29,7 @@ static ForwarderHttpStatus status = ForwarderHttpStatus::Unconfigured;
 static int lastCode = 0;
 static char lastError[96] = "";
 static bool printedUnconfigured = false;
+static PushHttpRequest currentRequest;
 
 static BarkChannelConfig barkConfig() {
   BarkChannelConfig config = {};
@@ -123,8 +124,7 @@ void forwarderHttpPoll(uint32_t nowMs) {
     return;
   }
 
-  PushHttpRequest request = {};
-  if (!forwarderHttpBuildBarkRequest(barkConfig(), item->message, request)) {
+  if (!forwarderHttpBuildBarkRequest(barkConfig(), item->message, currentRequest)) {
     smsQueueMarkFailed(item, "push_config_invalid", ForwarderHttpCore::kMaxRetryDelayMs, nowMs);
     status = ForwarderHttpStatus::LastFailed;
     setLastError("push_config_invalid");
@@ -137,7 +137,7 @@ void forwarderHttpPoll(uint32_t nowMs) {
   Serial.print("forwarder_http_send sender=");
   Serial.println(item->message.sender);
 
-  PushHttpResult result = executeHttpRequest(request);
+  PushHttpResult result = executeHttpRequest(currentRequest);
   if (result.success) {
     smsQueueMarkSent(item, millis());
     status = ForwarderHttpStatus::LastSuccess;

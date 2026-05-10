@@ -56,12 +56,19 @@ static void printSmsDebug(const SmsMessage& message, bool enqueued) {
   Serial.println(message.pdu);
   if (message.isConcat) {
     Serial.print("sms_concat=");
-    Serial.print(message.concatPart);
-    Serial.print("/");
-    Serial.print(message.concatTotal);
+    if (message.concatComplete) {
+      Serial.print("merged total=");
+      Serial.print(message.concatTotal);
+    } else if (message.concatPartial) {
+      Serial.print("partial total=");
+      Serial.print(message.concatTotal);
+    } else {
+      Serial.print(message.concatPart);
+      Serial.print("/");
+      Serial.print(message.concatTotal);
+    }
     Serial.print(" ref=");
     Serial.println(message.concatRef);
-    Serial.println("sms_concat_note=v0_detect_only_no_merge");
   }
   Serial.println("sms_received_end");
 }
