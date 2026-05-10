@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config_store_core.h"
 #include "logger_core.h"
 #include "sms_queue_core.h"
 
@@ -24,8 +25,16 @@ struct WebStatusSnapshot {
   uint16_t loggerCount;
 };
 
+enum class WebConfigParseResult {
+  Ok,
+  InvalidJson,
+  ValueTooLong,
+};
+
 bool webJsonEscape(const char* input, char* output, size_t outputSize);
 bool webBuildStatusJson(const WebStatusSnapshot& status, char* output, size_t outputSize);
 bool webBuildLogEntryJson(const LoggerEntry& entry, char* output, size_t outputSize);
 bool webBuildQueueItemJson(const SmsQueueItem& item, uint8_t index, char* output, size_t outputSize);
+bool webBuildConfigJson(const DeviceConfig& config, char* output, size_t outputSize);
+WebConfigParseResult webParseConfigSaveJson(const char* json, DeviceConfig& config);
 const char* webSmsQueueStatusName(SmsQueueStatus status);
