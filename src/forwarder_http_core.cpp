@@ -23,6 +23,54 @@ static void appendString(const char* value, char*& output, uint16_t& remaining) 
   }
 }
 
+static uint8_t utf8CharLength(unsigned char lead) {
+  if ((lead & 0x80) == 0) {
+    return 1;
+  }
+  if ((lead & 0xE0) == 0xC0) {
+    return 2;
+  }
+  if ((lead & 0xF0) == 0xE0) {
+    return 3;
+  }
+  if ((lead & 0xF8) == 0xF0) {
+    return 4;
+  }
+  return 1;
+}
+
+static bool isValidUtf8Continuation(unsigned char value) {
+  return (value & 0xC0) == 0x80;
+}
+
+static void appendUtf8Char(const char*& input, char*& output, uint16_t& remaining) {
+  const unsigned char lead = static_cast<unsigned char>(*input);
+  const uint8_t charLen = utf8CharLength(lead);
+  if (charLen == 1) {
+    appendChar(*input, output, remaining);
+    input++;
+    return;
+  }
+
+  for (uint8_t i = 1; i < charLen; ++i) {
+    if (input[i] == '\0' || !isValidUtf8Continuation(static_cast<unsigned char>(input[i]))) {
+      appendChar(*input, output, remaining);
+      input++;
+      return;
+    }
+  }
+
+  if (remaining <= charLen) {
+    remaining = 1;
+    return;
+  }
+
+  for (uint8_t i = 0; i < charLen; ++i) {
+    appendChar(input[i], output, remaining);
+  }
+  input += charLen;
+}
+
 void ForwarderHttpCore::begin() {
 }
 
@@ -78,28 +126,33 @@ void forwarderHttpEscapeJson(const char* input, char* output, uint16_t outputSiz
     switch (*input) {
       case '"':
         appendString("\\\"", cursor, remaining);
+        input++;
         break;
       case '\\':
         appendString("\\\\", cursor, remaining);
+        input++;
         break;
       case '\n':
         appendString("\\n", cursor, remaining);
+        input++;
         break;
       case '\r':
         appendString("\\r", cursor, remaining);
+        input++;
         break;
       case '\t':
         appendString("\\t", cursor, remaining);
+        input++;
         break;
       default:
         if (static_cast<unsigned char>(*input) < 0x20) {
           appendChar(' ', cursor, remaining);
+          input++;
         } else {
-          appendChar(*input, cursor, remaining);
+          appendUtf8Char(input, cursor, remaining);
         }
         break;
     }
-    input++;
   }
 }
 
@@ -133,17 +186,14 @@ bool forwarderHttpBuildBarkRequest(const BarkChannelConfig& config,
   }
 
   char escapedSender[96];
-  char escapedTimestamp[64];
-  char escapedText[576];
+  char escapedText[3072];
   forwarderHttpEscapeJson(message.sender, escapedSender, sizeof(escapedSender));
-  forwarderHttpEscapeJson(message.timestamp, escapedTimestamp, sizeof(escapedTimestamp));
   forwarderHttpEscapeJson(message.text, escapedText, sizeof(escapedText));
 
   const int bodyWritten = snprintf(request.body,
                                    sizeof(request.body),
-                                   "{\"title\":\"SMS from %s\",\"body\":\"%s\\n%s\",\"group\":\"ESP32 SMS Bridge\"}",
+                                   "{\"title\":\"SMS from %s\",\"body\":\"%s\",\"group\":\"ESP32 SMS Bridge\"}",
                                    escapedSender,
-                                   escapedTimestamp,
                                    escapedText);
   return bodyWritten >= 0 && static_cast<size_t>(bodyWritten) < sizeof(request.body);
 }

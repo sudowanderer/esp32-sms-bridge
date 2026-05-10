@@ -30,6 +30,15 @@ void test_json_escape_truncates_with_valid_null_termination() {
   TEST_ASSERT_TRUE(strlen(output) < sizeof(output));
 }
 
+void test_json_escape_truncates_without_splitting_utf8_character() {
+  char output[8];
+
+  forwarderHttpEscapeJson("中文短信", output, sizeof(output));
+
+  TEST_ASSERT_EQUAL('\0', output[sizeof(output) - 1]);
+  TEST_ASSERT_EQUAL_STRING("中文", output);
+}
+
 void test_bark_channel_builds_post_json_request() {
   SmsMessage message;
   fillMessage(message, "+8613800138000", "hello bark");
@@ -46,7 +55,29 @@ void test_bark_channel_builds_post_json_request() {
   TEST_ASSERT_EQUAL_STRING("application/json", request.contentType);
   TEST_ASSERT_EQUAL(ForwarderHttpCore::kHttpTimeoutMs, request.timeoutMs);
   TEST_ASSERT_NOT_NULL(strstr(request.body, "\"title\":\"SMS from +8613800138000\""));
-  TEST_ASSERT_NOT_NULL(strstr(request.body, "\"body\":\"260510120000\\nhello bark\""));
+  TEST_ASSERT_NOT_NULL(strstr(request.body, "\"body\":\"hello bark\""));
+  TEST_ASSERT_NULL(strstr(request.body, "260510120000"));
+  TEST_ASSERT_NOT_NULL(strstr(request.body, "\"group\":\"ESP32 SMS Bridge\""));
+}
+
+void test_bark_channel_preserves_long_merged_sms_body() {
+  SmsMessage message;
+  fillMessage(message, "8618121865592", "");
+  const char* chunk =
+      "TinyGo 对你这种 Go 背景的人来说开发体验更舒服，但代价是资源占用更高；"
+      "如果要长期稳定运行、低功耗、Wi-Fi 和复杂外设，C/C++ 更合适。\n";
+  for (int i = 0; i < 6; ++i) {
+    strncat(message.text, chunk, sizeof(message.text) - strlen(message.text) - 1);
+  }
+  strncat(message.text, "END-OF-LONG-SMS", sizeof(message.text) - strlen(message.text) - 1);
+
+  PushChannelConfig config = {};
+  strncpy(config.bark.serverUrl, "https://api.day.app", sizeof(config.bark.serverUrl) - 1);
+  strncpy(config.bark.deviceKey, "test-device-key", sizeof(config.bark.deviceKey) - 1);
+  PushHttpRequest request = {};
+
+  TEST_ASSERT_TRUE(forwarderHttpBuildBarkRequest(config.bark, message, request));
+  TEST_ASSERT_NOT_NULL(strstr(request.body, "END-OF-LONG-SMS"));
   TEST_ASSERT_NOT_NULL(strstr(request.body, "\"group\":\"ESP32 SMS Bridge\""));
 }
 
@@ -152,7 +183,9 @@ int main(int argc, char** argv) {
   UNITY_BEGIN();
   RUN_TEST(test_json_escape_handles_quotes_slashes_and_control_chars);
   RUN_TEST(test_json_escape_truncates_with_valid_null_termination);
+  RUN_TEST(test_json_escape_truncates_without_splitting_utf8_character);
   RUN_TEST(test_bark_channel_builds_post_json_request);
+  RUN_TEST(test_bark_channel_preserves_long_merged_sms_body);
   RUN_TEST(test_bark_channel_rejects_missing_config);
   RUN_TEST(test_forwarder_does_nothing_when_wifi_is_disconnected);
   RUN_TEST(test_forwarder_prepares_next_due_sms_when_wifi_is_connected);
