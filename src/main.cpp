@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include "cellular_status.h"
 #include "config_store.h"
 #include "forwarder_http.h"
 #include "logger.h"
@@ -160,6 +161,7 @@ void setup() {
   smsQueueBegin();
   configStoreBegin();
   wifiManagerBegin();
+  cellularStatusBegin();
   forwarderHttpBegin();
   webServerBegin();
   smsReceiverSetCallback(handleSmsReceived, nullptr);
@@ -171,6 +173,7 @@ void setup() {
 void loop() {
   modemAtPoll();
   smsReceiverPoll(millis());
+  cellularStatusPoll(millis());
   wifiManagerPoll(millis());
   webServerPoll();
   forwarderHttpPoll(millis());

@@ -27,6 +27,12 @@ void test_status_json_contains_runtime_state() {
   status.freeHeap = 210000;
   status.modemBusy = true;
   status.modemQueueDepth = 2;
+  status.cellularSignalKnown = true;
+  status.cellularCsq = 20;
+  status.cellularRssiDbm = -73;
+  status.cellularRegistrationKnown = true;
+  status.cellularRegistrationStatus = 1;
+  strncpy(status.cellularRegistrationText, "registered_home", sizeof(status.cellularRegistrationText) - 1);
   status.smsQueueDepth = 3;
   status.smsQueuePending = 1;
   status.wifiConfigured = true;
@@ -45,6 +51,7 @@ void test_status_json_contains_runtime_state() {
   TEST_ASSERT_NOT_NULL(strstr(output, "\"uptime_ms\":12345"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"free_heap\":210000"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"modem\":{\"busy\":true,\"queue_depth\":2}"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"cellular\":{\"signal_known\":true,\"csq\":20,\"rssi_dbm\":-73,\"registration_known\":true,\"registration_status\":1,\"registration\":\"registered_home\"}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"sms_queue\":{\"depth\":3,\"pending\":1}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"wifi\":{\"configured\":true,\"connected\":true,\"status\":\"connected\",\"ip\":\"192.168.1.20\"}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"forwarder_http\":{\"configured\":true,\"status\":\"last_success\",\"last_code\":200,\"last_error\":\"\"}"));
@@ -188,6 +195,53 @@ void test_parse_config_save_json_decodes_escaped_values() {
   TEST_ASSERT_EQUAL_STRING("key\\123", config.barkDeviceKey);
 }
 
+void test_status_page_contains_openwrt_style_dashboard_hooks() {
+  char output[4096];
+
+  TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Status, output, sizeof(output)));
+
+  TEST_ASSERT_NOT_NULL(strstr(output, "SMS Bridge"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "System"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "WiFi"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "4G Modem"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "/api/status"));
+}
+
+void test_config_page_posts_json_to_config_api() {
+  char output[4096];
+
+  TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Config, output, sizeof(output)));
+
+  TEST_ASSERT_NOT_NULL(strstr(output, "Configuration"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "/api/config"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "/api/config/save"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "wifi_ssid"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "bark_device_key"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "leave blank to keep"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "if($('wifi_password').value)"));
+}
+
+void test_queue_and_logs_pages_fit_and_escape_dynamic_rows() {
+  char output[4096];
+
+  TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Queue, output, sizeof(output)));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Queue"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "/api/queue"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "function h"));
+
+  TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Logs, output, sizeof(output)));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Logs"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "/api/logs?limit=80"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "function h"));
+}
+
+void test_page_html_reports_small_buffer_failure() {
+  char output[32];
+
+  TEST_ASSERT_FALSE(webBuildPageHtml(WebPageKind::Status, output, sizeof(output)));
+  TEST_ASSERT_EQUAL('\0', output[sizeof(output) - 1]);
+}
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -206,5 +260,9 @@ int main(int argc, char** argv) {
   RUN_TEST(test_parse_config_save_json_rejects_invalid_json);
   RUN_TEST(test_parse_config_save_json_rejects_too_long_value);
   RUN_TEST(test_parse_config_save_json_decodes_escaped_values);
+  RUN_TEST(test_status_page_contains_openwrt_style_dashboard_hooks);
+  RUN_TEST(test_config_page_posts_json_to_config_api);
+  RUN_TEST(test_queue_and_logs_pages_fit_and_escape_dynamic_rows);
+  RUN_TEST(test_page_html_reports_small_buffer_failure);
   return UNITY_END();
 }
