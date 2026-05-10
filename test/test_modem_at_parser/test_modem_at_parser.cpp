@@ -10,7 +10,7 @@ struct TestContext {
   ModemAtResult lastResult;
   char response[1024];
   int callbackCount;
-  char urcs[8][256];
+  char urcs[8][1536];
   int urcCount;
 };
 
@@ -141,6 +141,49 @@ void test_cmt_urc_does_not_pollute_running_command_response() {
   TEST_ASSERT_EQUAL_STRING("", ctx.response);
 }
 
+void test_cmt_pdu_line_longer_than_legacy_buffer_is_emitted_intact() {
+  TestContext ctx;
+  resetContext(ctx);
+  ModemAtCore core;
+  core.begin(0);
+  core.setUrcCallback(captureUrc, &ctx);
+
+  char longPdu[601];
+  for (size_t i = 0; i < sizeof(longPdu) - 1; ++i) {
+    longPdu[i] = (i % 2 == 0) ? 'A' : '1';
+  }
+  longPdu[sizeof(longPdu) - 1] = '\0';
+
+  feedLine(core, "+CMT: ,300");
+  feedLine(core, longPdu);
+
+  TEST_ASSERT_EQUAL(2, ctx.urcCount);
+  TEST_ASSERT_EQUAL_STRING("+CMT: ,300", ctx.urcs[0]);
+  TEST_ASSERT_EQUAL_STRING(longPdu, ctx.urcs[1]);
+}
+
+void test_over_capacity_line_is_discarded_until_newline_and_parser_recovers() {
+  TestContext ctx;
+  resetContext(ctx);
+  ModemAtCore core;
+  core.begin(0);
+  core.setUrcCallback(captureUrc, &ctx);
+
+  char tooLongLine[ModemAtCore::kLineCapacity + 32];
+  for (size_t i = 0; i < sizeof(tooLongLine) - 1; ++i) {
+    tooLongLine[i] = (i % 2 == 0) ? 'B' : '2';
+  }
+  tooLongLine[sizeof(tooLongLine) - 1] = '\0';
+
+  feedLine(core, "+CMT: ,999");
+  feedLine(core, tooLongLine);
+  feedLine(core, "+CEREG: 0,1");
+
+  TEST_ASSERT_EQUAL(2, ctx.urcCount);
+  TEST_ASSERT_EQUAL_STRING("+CMT: ,999", ctx.urcs[0]);
+  TEST_ASSERT_EQUAL_STRING("+CEREG: 0,1", ctx.urcs[1]);
+}
+
 void test_timeout_finishes_current_and_next_command_can_start() {
   TestContext ctx;
   resetContext(ctx);
@@ -182,6 +225,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_error_finishes_command);
   RUN_TEST(test_cme_error_finishes_command);
   RUN_TEST(test_cmt_urc_does_not_pollute_running_command_response);
+  RUN_TEST(test_cmt_pdu_line_longer_than_legacy_buffer_is_emitted_intact);
+  RUN_TEST(test_over_capacity_line_is_discarded_until_newline_and_parser_recovers);
   RUN_TEST(test_timeout_finishes_current_and_next_command_can_start);
   RUN_TEST(test_queue_capacity_is_enforced);
   return UNITY_END();

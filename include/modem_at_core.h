@@ -11,7 +11,7 @@ class ModemAtCore {
  public:
   static constexpr uint8_t kQueueCapacity = 4;
   static constexpr size_t kCommandCapacity = 96;
-  static constexpr size_t kLineCapacity = 256;
+  static constexpr size_t kLineCapacity = 1536;
   static constexpr size_t kResponseCapacity = 1024;
 
   void begin(uint32_t nowMs);
@@ -56,6 +56,7 @@ class ModemAtCore {
 
   char line_[kLineCapacity];
   size_t lineLen_ = 0;
+  bool lineOverflowed_ = false;
 
   char response_[kResponseCapacity];
   size_t responseLen_ = 0;
