@@ -12,6 +12,12 @@ struct WebStatusSnapshot {
   uint32_t freeHeap;
   bool modemBusy;
   uint8_t modemQueueDepth;
+  bool cellularSignalKnown;
+  uint8_t cellularCsq;
+  int16_t cellularRssiDbm;
+  bool cellularRegistrationKnown;
+  uint8_t cellularRegistrationStatus;
+  char cellularRegistrationText[24];
   uint8_t smsQueueDepth;
   uint8_t smsQueuePending;
   bool wifiConfigured;
@@ -38,3 +44,12 @@ bool webBuildQueueItemJson(const SmsQueueItem& item, uint8_t index, char* output
 bool webBuildConfigJson(const DeviceConfig& config, char* output, size_t outputSize);
 WebConfigParseResult webParseConfigSaveJson(const char* json, DeviceConfig& config);
 const char* webSmsQueueStatusName(SmsQueueStatus status);
+
+enum class WebPageKind {
+  Status,
+  Config,
+  Queue,
+  Logs,
+};
+
+bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize);

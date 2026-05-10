@@ -1,5 +1,6 @@
 #include "web_server.h"
 
+#include "cellular_status.h"
 #include "config_store.h"
 #include "forwarder_http.h"
 #include "logger.h"
@@ -13,9 +14,14 @@
 
 static WebServer server(80);
 static bool started = false;
+static char pageResponse[4096];
 
 static void sendJsonBuffer(const char* json) {
   server.send(200, "application/json", json);
+}
+
+static void sendHtmlBuffer(const char* html) {
+  server.send(200, "text/html; charset=utf-8", html);
 }
 
 static void sendJsonError(int code, const char* error) {
@@ -54,10 +60,17 @@ static uint16_t requestedLimit(uint16_t defaultLimit, uint16_t maxLimit) {
 
 static void handleStatus() {
   WebStatusSnapshot snapshot = {};
+  CellularStatusSnapshot cellular = cellularStatusGet();
   snapshot.uptimeMs = millis();
   snapshot.freeHeap = ESP.getFreeHeap();
   snapshot.modemBusy = modemAtIsBusy();
   snapshot.modemQueueDepth = modemAtQueueDepth();
+  snapshot.cellularSignalKnown = cellular.signalKnown;
+  snapshot.cellularCsq = cellular.csqRssi;
+  snapshot.cellularRssiDbm = cellular.rssiDbm;
+  snapshot.cellularRegistrationKnown = cellular.registrationKnown;
+  snapshot.cellularRegistrationStatus = cellular.registrationStatus;
+  snprintf(snapshot.cellularRegistrationText, sizeof(snapshot.cellularRegistrationText), "%s", cellular.registrationText);
   snapshot.smsQueueDepth = smsQueueDepth();
   snapshot.smsQueuePending = smsQueuePendingCount();
   snapshot.wifiConfigured = wifiManagerIsConfigured();
@@ -79,6 +92,15 @@ static void handleStatus() {
   }
 
   sendJsonBuffer(response);
+}
+
+static void handlePage(WebPageKind page) {
+  if (!webBuildPageHtml(page, pageResponse, sizeof(pageResponse))) {
+    sendJsonError(500, "page_too_large");
+    return;
+  }
+
+  sendHtmlBuffer(pageResponse);
 }
 
 static void handleLogs() {
@@ -189,6 +211,18 @@ void webServerBegin() {
   server.on("/api/queue", HTTP_GET, handleQueue);
   server.on("/api/config", HTTP_GET, handleConfigGet);
   server.on("/api/config/save", HTTP_POST, handleConfigSave);
+  server.on("/", HTTP_GET, []() {
+    handlePage(WebPageKind::Status);
+  });
+  server.on("/config", HTTP_GET, []() {
+    handlePage(WebPageKind::Config);
+  });
+  server.on("/queue", HTTP_GET, []() {
+    handlePage(WebPageKind::Queue);
+  });
+  server.on("/logs", HTTP_GET, []() {
+    handlePage(WebPageKind::Logs);
+  });
   server.onNotFound([]() {
     sendJsonError(404, "not_found");
   });

@@ -302,7 +302,9 @@ TODO：
 - [x] 实现状态 API
 - [x] 实现配置 API
 - [x] 实现日志 API
-- [ ] 实现轻量 CSS
+- [x] 实现 OpenWrt/LuCI 风格基础页面
+- [x] 实现轻量 CSS
+- [x] 首页展示基础 4G 信号和注册状态
 - [ ] 避免 C++ 中大量拼接 HTML
 
 ### `health_monitor`
