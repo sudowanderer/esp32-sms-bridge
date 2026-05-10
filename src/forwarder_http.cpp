@@ -1,6 +1,7 @@
 #include "forwarder_http.h"
 
 #include "forwarder_http_core.h"
+#include "logger.h"
 #include "sms_queue.h"
 #include "wifi_manager.h"
 
@@ -93,14 +94,14 @@ void forwarderHttpBegin() {
   if (!forwarderHttpIsConfigured()) {
     status = ForwarderHttpStatus::Unconfigured;
     if (!printedUnconfigured) {
-      Serial.println("forwarder_http_status=unconfigured");
+      logWarn("forwarder_http_status=unconfigured");
       printedUnconfigured = true;
     }
     return;
   }
 
   status = ForwarderHttpStatus::Idle;
-  Serial.println("forwarder_http_status=idle");
+  logInfo("forwarder_http_status=idle");
 }
 
 void forwarderHttpPoll(uint32_t nowMs) {
@@ -128,22 +129,23 @@ void forwarderHttpPoll(uint32_t nowMs) {
     smsQueueMarkFailed(item, "push_config_invalid", ForwarderHttpCore::kMaxRetryDelayMs, nowMs);
     status = ForwarderHttpStatus::LastFailed;
     setLastError("push_config_invalid");
-    Serial.println("forwarder_http_result=failed error=push_config_invalid");
+    logError("forwarder_http_result=failed error=push_config_invalid");
     return;
   }
 
   smsQueueMarkSending(item, nowMs);
   status = ForwarderHttpStatus::Sending;
-  Serial.print("forwarder_http_send sender=");
-  Serial.println(item->message.sender);
+  char message[128];
+  snprintf(message, sizeof(message), "forwarder_http_send sender=%s", item->message.sender);
+  logInfo(message);
 
   PushHttpResult result = executeHttpRequest(currentRequest);
   if (result.success) {
     smsQueueMarkSent(item, millis());
     status = ForwarderHttpStatus::LastSuccess;
     setLastError("");
-    Serial.print("forwarder_http_result=sent code=");
-    Serial.println(result.httpCode);
+    snprintf(message, sizeof(message), "forwarder_http_result=sent code=%d", result.httpCode);
+    logInfo(message);
     return;
   }
 
@@ -152,10 +154,8 @@ void forwarderHttpPoll(uint32_t nowMs) {
   smsQueueMarkFailed(item, error, retryDelayMs, millis());
   status = ForwarderHttpStatus::LastFailed;
   setLastError(error);
-  Serial.print("forwarder_http_result=failed code=");
-  Serial.print(result.httpCode);
-  Serial.print(" error=");
-  Serial.println(error);
+  snprintf(message, sizeof(message), "forwarder_http_result=failed code=%d error=%s", result.httpCode, error);
+  logError(message);
 }
 
 bool forwarderHttpIsConfigured() {

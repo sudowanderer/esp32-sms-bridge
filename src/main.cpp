@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "forwarder_http.h"
+#include "logger.h"
 #include "modem_at.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
@@ -78,11 +79,27 @@ static void handleSmsReceived(const SmsMessage& message, void* userData) {
 
   const uint32_t now = millis();
   const bool enqueued = smsQueueEnqueue(message, now);
+  char logMessage[160];
+  snprintf(logMessage,
+           sizeof(logMessage),
+           "sms_received sender=%s queued=%s concat=%s",
+           message.sender,
+           enqueued ? "yes" : "no",
+           message.isConcat ? (message.concatComplete ? "merged" : (message.concatPartial ? "partial" : "part")) : "no");
+  if (enqueued) {
+    logInfo(logMessage);
+  } else {
+    logError(logMessage);
+  }
   printSmsDebug(message, enqueued);
 }
 
 static void printSmsError(const char* reason, const char* rawLine, void* userData) {
   (void)userData;
+
+  char logMessage[160];
+  snprintf(logMessage, sizeof(logMessage), "sms_error=%s", reason != nullptr ? reason : "");
+  logError(logMessage);
 
   Serial.print("sms_error=");
   Serial.print(reason);
@@ -103,6 +120,9 @@ static void handleModemUrc(const char* line, void* userData) {
 
 static void submitStartupCommand(const char* command) {
   if (!modemAtSubmit(command, kCommandTimeoutMs, printAtResult, const_cast<char*>(command))) {
+    char message[96];
+    snprintf(message, sizeof(message), "at_command=%s result=QUEUE_FULL", command);
+    logWarn(message);
     Serial.print("at_command=");
     Serial.print(command);
     Serial.println(" result=QUEUE_FULL");
@@ -119,9 +139,11 @@ static void submitStartupCommands() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  loggerBegin();
 
   Serial.println();
   Serial.println("ESP32 SMS bridge sms_receiver v0 smoke test");
+  logInfo("system_boot app=sms_receiver_v0");
   Serial.print("chip_model=");
   Serial.println(ESP.getChipModel());
   Serial.print("chip_revision=");
