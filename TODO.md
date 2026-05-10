@@ -141,7 +141,7 @@ TODO：
 
 - [x] 实现 `logInfo()` / `logWarn()` / `logError()`
 - [x] 实现环形日志缓冲区
-- [ ] 实现 `/api/logs`
+- [x] 实现 `/api/logs`
 - [x] 支持清空日志
 
 ### `config_store`
@@ -245,7 +245,7 @@ TODO：
 - [x] 队列满时按固定策略处理
 - [x] 每条短信记录转发状态
 - [x] 每条短信记录失败次数
-- [ ] 提供 Web 查询队列状态
+- [x] 提供 Web 查询队列状态
 
 ### `forwarder_http`
 
@@ -297,11 +297,11 @@ API：
 
 TODO：
 
-- [ ] 实现基础 WebServer
+- [x] 实现基础 WebServer
 - [ ] 实现 Basic Auth
-- [ ] 实现状态 API
+- [x] 实现状态 API
 - [ ] 实现配置 API
-- [ ] 实现日志 API
+- [x] 实现日志 API
 - [ ] 实现轻量 CSS
 - [ ] 避免 C++ 中大量拼接 HTML
 
