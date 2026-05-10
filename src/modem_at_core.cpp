@@ -9,6 +9,7 @@ void ModemAtCore::begin(uint32_t nowMs) {
   currentStartedMs_ = nowMs;
   currentDeadlineMs_ = nowMs;
   lineLen_ = 0;
+  lineOverflowed_ = false;
   responseLen_ = 0;
   response_[0] = '\0';
   awaitingCmtPdu_ = false;
@@ -31,6 +32,12 @@ void ModemAtCore::onByte(char c) {
   }
 
   if (c == '\n') {
+    if (lineOverflowed_) {
+      lineLen_ = 0;
+      lineOverflowed_ = false;
+      return;
+    }
+
     line_[lineLen_] = '\0';
     handleLine(line_);
     lineLen_ = 0;
@@ -42,8 +49,9 @@ void ModemAtCore::onByte(char c) {
     return;
   }
 
-  // 超长行通常说明串口数据异常。丢弃当前行，避免越界并等待下一次换行恢复同步。
+  // 超长行必须整行丢弃，避免把后半截 PDU 当成新的 URC/PDU 交给上层。
   lineLen_ = 0;
+  lineOverflowed_ = true;
 }
 
 bool ModemAtCore::submit(const char* command, uint32_t timeoutMs, ModemAtCallback callback, void* userData) {
