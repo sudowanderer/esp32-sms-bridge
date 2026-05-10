@@ -1,6 +1,9 @@
 #include "wifi_manager.h"
 
+#include "logger.h"
+
 #include <WiFi.h>
+#include <stdio.h>
 
 #if __has_include("local_wifi_config.h")
 #include "local_wifi_config.h"
@@ -16,8 +19,9 @@ static bool hasWifiCredentials() {
 }
 
 static void startWifiConnection() {
-  Serial.print("wifi_connect ssid=");
-  Serial.println(WIFI_SSID);
+  char message[96];
+  snprintf(message, sizeof(message), "wifi_connect ssid=%s", WIFI_SSID);
+  logInfo(message);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -29,7 +33,7 @@ void wifiManagerBegin() {
 
   wifiCore.begin(hasWifiCredentials(), millis());
   if (!hasWifiCredentials()) {
-    Serial.println("wifi_status=unconfigured");
+    logWarn("wifi_status=unconfigured");
     return;
   }
 
@@ -43,11 +47,12 @@ void wifiManagerPoll(uint32_t nowMs) {
   wifiCore.poll(WiFi.status() == WL_CONNECTED, nowMs);
 
   if (wifiCore.status() != previousStatus) {
-    Serial.print("wifi_status=");
-    Serial.println(wifiManagerStatusName());
+    char message[96];
+    snprintf(message, sizeof(message), "wifi_status=%s", wifiManagerStatusName());
+    logInfo(message);
     if (wifiCore.status() == WifiManagerStatus::Connected) {
-      Serial.print("wifi_ip=");
-      Serial.println(WiFi.localIP());
+      snprintf(message, sizeof(message), "wifi_ip=%s", WiFi.localIP().toString().c_str());
+      logInfo(message);
     }
   }
 

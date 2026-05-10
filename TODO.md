@@ -139,10 +139,10 @@ pio run -t uploadfs
 
 TODO：
 
-- [ ] 实现 `logInfo()` / `logWarn()` / `logError()`
-- [ ] 实现环形日志缓冲区
+- [x] 实现 `logInfo()` / `logWarn()` / `logError()`
+- [x] 实现环形日志缓冲区
 - [ ] 实现 `/api/logs`
-- [ ] 支持清空日志
+- [x] 支持清空日志
 
 ### `config_store`
 
