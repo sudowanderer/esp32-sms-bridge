@@ -164,11 +164,11 @@ TODO：
 
 TODO：
 
-- [ ] 定义 `DeviceConfig`
-- [ ] 实现默认配置
-- [ ] 实现加载配置
-- [ ] 实现保存配置
-- [ ] 实现恢复出厂配置
+- [x] 定义 `DeviceConfig`
+- [x] 实现默认配置
+- [x] 实现加载配置
+- [x] 实现保存配置
+- [x] 实现恢复出厂配置
 
 ### `wifi_manager`
 
@@ -181,7 +181,7 @@ TODO：
 
 TODO：
 
-- [ ] 从 NVS 读取 WiFi 配置
+- [x] 从 NVS 读取 WiFi 配置
 - [x] 正常 STA 模式连接 WiFi
 - [ ] 连接失败后开启 SoftAP 配网
 - [x] 每 10 秒检查连接状态

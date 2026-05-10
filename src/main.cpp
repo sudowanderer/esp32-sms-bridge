@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include "config_store.h"
 #include "forwarder_http.h"
 #include "logger.h"
 #include "modem_at.h"
@@ -157,6 +158,7 @@ void setup() {
   modemAtBegin();
   smsReceiverBegin();
   smsQueueBegin();
+  configStoreBegin();
   wifiManagerBegin();
   forwarderHttpBegin();
   webServerBegin();

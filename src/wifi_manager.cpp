@@ -1,30 +1,25 @@
 #include "wifi_manager.h"
 
+#include "config_store.h"
 #include "logger.h"
 
 #include <WiFi.h>
 #include <stdio.h>
 
-#if __has_include("local_wifi_config.h")
-#include "local_wifi_config.h"
-#else
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
-#endif
-
 static WifiManagerCore wifiCore;
 
 static bool hasWifiCredentials() {
-  return WIFI_SSID[0] != '\0';
+  return ConfigStoreCore::hasWifiConfig(configStoreGet());
 }
 
 static void startWifiConnection() {
+  const DeviceConfig& config = configStoreGet();
   char message[96];
-  snprintf(message, sizeof(message), "wifi_connect ssid=%s", WIFI_SSID);
+  snprintf(message, sizeof(message), "wifi_connect ssid=%s", config.wifiSsid);
   logInfo(message);
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(config.wifiSsid, config.wifiPassword);
 }
 
 void wifiManagerBegin() {

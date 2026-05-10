@@ -1,5 +1,6 @@
 #include "forwarder_http.h"
 
+#include "config_store.h"
 #include "forwarder_http_core.h"
 #include "logger.h"
 #include "sms_queue.h"
@@ -10,13 +11,6 @@
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <string.h>
-
-#if __has_include("local_push_config.h")
-#include "local_push_config.h"
-#else
-#define PUSH_BARK_SERVER_URL ""
-#define PUSH_BARK_DEVICE_KEY ""
-#endif
 
 enum class ForwarderHttpStatus {
   Unconfigured,
@@ -33,9 +27,10 @@ static bool printedUnconfigured = false;
 static PushHttpRequest currentRequest;
 
 static BarkChannelConfig barkConfig() {
+  const DeviceConfig& deviceConfig = configStoreGet();
   BarkChannelConfig config = {};
-  strncpy(config.serverUrl, PUSH_BARK_SERVER_URL, sizeof(config.serverUrl) - 1);
-  strncpy(config.deviceKey, PUSH_BARK_DEVICE_KEY, sizeof(config.deviceKey) - 1);
+  strncpy(config.serverUrl, deviceConfig.barkServerUrl, sizeof(config.serverUrl) - 1);
+  strncpy(config.deviceKey, deviceConfig.barkDeviceKey, sizeof(config.deviceKey) - 1);
   return config;
 }
 
@@ -159,7 +154,7 @@ void forwarderHttpPoll(uint32_t nowMs) {
 }
 
 bool forwarderHttpIsConfigured() {
-  return PUSH_BARK_SERVER_URL[0] != '\0' && PUSH_BARK_DEVICE_KEY[0] != '\0';
+  return ConfigStoreCore::hasBarkConfig(configStoreGet());
 }
 
 const char* forwarderHttpStatusName() {
