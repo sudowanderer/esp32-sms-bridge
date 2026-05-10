@@ -5,6 +5,7 @@
 #include "modem_at.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
+#include "web_server.h"
 #include "wifi_manager.h"
 
 static constexpr uint32_t kLogIntervalMs = 1000;
@@ -158,6 +159,7 @@ void setup() {
   smsQueueBegin();
   wifiManagerBegin();
   forwarderHttpBegin();
+  webServerBegin();
   smsReceiverSetCallback(handleSmsReceived, nullptr);
   smsReceiverSetErrorCallback(printSmsError, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
@@ -168,6 +170,7 @@ void loop() {
   modemAtPoll();
   smsReceiverPoll(millis());
   wifiManagerPoll(millis());
+  webServerPoll();
   forwarderHttpPoll(millis());
 
   const uint32_t now = millis();
