@@ -5,9 +5,11 @@
 struct SmsMessage {
   char sender[32];
   char timestamp[32];
-  char text[512];
+  char text[1536];
   char pdu[384];
   bool isConcat;
+  bool concatComplete;
+  bool concatPartial;
   uint8_t concatRef;
   uint8_t concatPart;
   uint8_t concatTotal;
@@ -24,5 +26,5 @@ bool smsReceiverOnUrc(const char* line);
 void smsReceiverSetCallback(SmsReceivedCallback callback, void* userData);
 void smsReceiverSetErrorCallback(SmsErrorCallback callback, void* userData);
 
-// v0 主要用于等待 PDU 行超时恢复，避免收到半截 +CMT 后状态机一直卡住。
+// 推进 PDU 等待和长短信缺片超时恢复。
 void smsReceiverPoll(uint32_t nowMs);

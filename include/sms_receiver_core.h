@@ -10,6 +10,10 @@ using SmsPduDecodeFn = bool (*)(const char* pdu, SmsMessage* message, char* erro
 class SmsReceiverCore {
  public:
   static constexpr uint32_t kPduWaitTimeoutMs = 5000;
+  static constexpr uint32_t kConcatTimeoutMs = 30000;
+  static constexpr uint8_t kMaxConcatParts = 10;
+  static constexpr uint8_t kMaxConcatMessages = 5;
+  static constexpr size_t kConcatPartTextCapacity = 384;
 
   void begin(SmsPduDecodeFn decoder, void* decoderUserData);
   bool onUrc(const char* line, uint32_t nowMs);
@@ -19,11 +23,30 @@ class SmsReceiverCore {
   void setErrorCallback(SmsErrorCallback callback, void* userData);
 
  private:
-  void handlePduLine(const char* line);
+  struct ConcatSlot {
+    bool inUse;
+    uint8_t ref;
+    uint8_t totalParts;
+    uint8_t receivedParts;
+    uint32_t firstPartMs;
+    SmsMessage baseMessage;
+    bool partValid[kMaxConcatParts];
+    char partText[kMaxConcatParts][kConcatPartTextCapacity];
+  };
+
+  void handlePduLine(const char* line, uint32_t nowMs);
+  void handleDecodedMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu);
+  void handleConcatMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu);
+  int findConcatSlot(const SmsMessage& message) const;
+  int findFreeConcatSlot() const;
+  void clearConcatSlot(uint8_t slotIndex);
+  void clearConcatSlots();
+  void emitConcatSlot(uint8_t slotIndex, bool complete);
   void emitError(const char* reason, const char* rawLine);
   static bool startsWith(const char* value, const char* prefix);
   static bool isHexString(const char* value);
   static void copyText(char* dest, size_t destCapacity, const char* source);
+  static bool appendText(char* dest, size_t destCapacity, const char* source);
 
   bool awaitingPdu_ = false;
   uint32_t pduDeadlineMs_ = 0;
@@ -37,4 +60,6 @@ class SmsReceiverCore {
 
   SmsErrorCallback errorCallback_ = nullptr;
   void* errorUserData_ = nullptr;
+
+  ConcatSlot concatSlots_[kMaxConcatMessages];
 };
