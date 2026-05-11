@@ -89,7 +89,7 @@ void test_acquire_next_returns_due_pending_sms_only() {
   TEST_ASSERT_EQUAL_STRING("first", queue.acquireNext(600)->message.text);
 }
 
-void test_mark_sending_and_sent_remove_item_from_acquire_candidates() {
+void test_mark_sending_and_sent_removes_item_from_queue() {
   SmsQueueCore queue;
   queue.begin();
   SmsMessage message;
@@ -105,10 +105,34 @@ void test_mark_sending_and_sent_remove_item_from_acquire_candidates() {
   TEST_ASSERT_NULL(queue.acquireNext(102));
 
   queue.markSent(item, 120);
-  TEST_ASSERT_EQUAL(SmsQueueStatus::Sent, item->status);
-  TEST_ASSERT_EQUAL(120, item->updatedAtMs);
   TEST_ASSERT_NULL(queue.acquireNext(200));
   TEST_ASSERT_EQUAL(0, queue.pendingCount());
+  TEST_ASSERT_EQUAL(0, queue.depth());
+  TEST_ASSERT_NULL(queue.get(0));
+}
+
+void test_mark_sent_frees_capacity_for_new_sms() {
+  SmsQueueCore queue;
+  queue.begin();
+  SmsMessage message;
+
+  for (uint8_t i = 0; i < SmsQueueCore::kCapacity; ++i) {
+    char sender[32];
+    snprintf(sender, sizeof(sender), "+86138001380%02u", i);
+    fillMessage(message, sender, "queued");
+    TEST_ASSERT_TRUE(queue.enqueue(message, 100 + i));
+  }
+
+  SmsQueueItem* item = queue.acquireNext(200);
+  TEST_ASSERT_NOT_NULL(item);
+  queue.markSent(item, 250);
+
+  fillMessage(message, "+8699999999999", "after sent");
+  TEST_ASSERT_TRUE(queue.enqueue(message, 300));
+
+  TEST_ASSERT_EQUAL(SmsQueueCore::kCapacity, queue.depth());
+  TEST_ASSERT_EQUAL_STRING("+8613800138001", queue.get(0)->message.sender);
+  TEST_ASSERT_EQUAL_STRING("+8699999999999", queue.get(SmsQueueCore::kCapacity - 1)->message.sender);
 }
 
 void test_mark_failed_sets_retry_metadata_and_truncates_error() {
@@ -142,7 +166,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_enqueue_adds_pending_sms);
   RUN_TEST(test_full_queue_rejects_new_sms_without_overwriting_existing_items);
   RUN_TEST(test_acquire_next_returns_due_pending_sms_only);
-  RUN_TEST(test_mark_sending_and_sent_remove_item_from_acquire_candidates);
+  RUN_TEST(test_mark_sending_and_sent_removes_item_from_queue);
+  RUN_TEST(test_mark_sent_frees_capacity_for_new_sms);
   RUN_TEST(test_mark_failed_sets_retry_metadata_and_truncates_error);
   return UNITY_END();
 }

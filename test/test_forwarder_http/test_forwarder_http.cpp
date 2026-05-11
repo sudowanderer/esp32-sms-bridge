@@ -140,7 +140,7 @@ void test_forwarder_marks_success_as_sent() {
   result.httpCode = 200;
   forwarder.complete(queue, decision.item, result, 150);
 
-  TEST_ASSERT_EQUAL(SmsQueueStatus::Sent, queue.get(0)->status);
+  TEST_ASSERT_EQUAL(0, queue.depth());
   TEST_ASSERT_EQUAL(0, queue.pendingCount());
 }
 

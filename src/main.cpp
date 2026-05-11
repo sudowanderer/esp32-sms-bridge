@@ -83,12 +83,26 @@ static void handleSmsReceived(const SmsMessage& message, void* userData) {
   const uint32_t now = millis();
   const bool enqueued = smsQueueEnqueue(message, now);
   char logMessage[160];
-  snprintf(logMessage,
-           sizeof(logMessage),
-           "sms_received sender=%s queued=%s concat=%s",
-           message.sender,
-           enqueued ? "yes" : "no",
-           message.isConcat ? (message.concatComplete ? "merged" : (message.concatPartial ? "partial" : "part")) : "no");
+  const char* concatStatus =
+      message.isConcat ? (message.concatComplete ? "merged" : (message.concatPartial ? "partial" : "part")) : "no";
+  if (enqueued) {
+    snprintf(logMessage,
+             sizeof(logMessage),
+             "sms_received sender=%s queued=yes concat=%s queue_depth=%u queue_pending=%u",
+             message.sender,
+             concatStatus,
+             smsQueueDepth(),
+             smsQueuePendingCount());
+  } else {
+    snprintf(logMessage,
+             sizeof(logMessage),
+             "sms_received sender=%s queued=no reason=queue_full concat=%s queue_depth=%u queue_pending=%u queue_capacity=%u",
+             message.sender,
+             concatStatus,
+             smsQueueDepth(),
+             smsQueuePendingCount(),
+             smsQueueCapacity());
+  }
   if (enqueued) {
     logInfo(logMessage);
   } else {

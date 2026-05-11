@@ -53,6 +53,19 @@ void SmsQueueCore::markSent(SmsQueueItem* item, uint32_t nowMs) {
 
   item->status = SmsQueueStatus::Sent;
   item->updatedAtMs = nowMs;
+
+  for (uint8_t i = 0; i < count_; ++i) {
+    if (&items_[i] != item) {
+      continue;
+    }
+
+    for (uint8_t j = i; j + 1 < count_; ++j) {
+      items_[j] = items_[j + 1];
+    }
+    --count_;
+    memset(&items_[count_], 0, sizeof(items_[count_]));
+    return;
+  }
 }
 
 void SmsQueueCore::markFailed(SmsQueueItem* item, const char* error, uint32_t retryDelayMs, uint32_t nowMs) {
