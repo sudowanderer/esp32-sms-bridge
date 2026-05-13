@@ -17,10 +17,13 @@ class SmsReceiverCore {
 
   void begin(SmsPduDecodeFn decoder, void* decoderUserData);
   bool onUrc(const char* line, uint32_t nowMs);
+  bool processPdu(const char* pdu, uint32_t nowMs);
   void poll(uint32_t nowMs);
 
   void setReceivedCallback(SmsReceivedCallback callback, void* userData);
+  void setDecodedCallback(SmsDecodedCallback callback, void* userData);
   void setErrorCallback(SmsErrorCallback callback, void* userData);
+  void setStorageCallback(SmsStorageCallback callback, void* userData);
 
  private:
   struct ConcatSlot {
@@ -34,15 +37,17 @@ class SmsReceiverCore {
     char partText[kMaxConcatParts][kConcatPartTextCapacity];
   };
 
-  void handlePduLine(const char* line, uint32_t nowMs);
-  void handleDecodedMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu);
-  void handleConcatMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu);
+  bool handlePduLine(const char* line, uint32_t nowMs);
+  bool handleDecodedMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu);
+  bool handleConcatMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu);
   int findConcatSlot(const SmsMessage& message) const;
   int findFreeConcatSlot() const;
   void clearConcatSlot(uint8_t slotIndex);
   void clearConcatSlots();
-  void emitConcatSlot(uint8_t slotIndex, bool complete);
+  bool emitConcatSlot(uint8_t slotIndex, bool complete);
   void emitError(const char* reason, const char* rawLine);
+  void emitStorage(const SmsStorageNotification& notification);
+  static bool parseCmtiLine(const char* line, SmsStorageNotification& notification);
   static bool startsWith(const char* value, const char* prefix);
   static bool isHexString(const char* value);
   static void copyText(char* dest, size_t destCapacity, const char* source);
@@ -58,8 +63,14 @@ class SmsReceiverCore {
   SmsReceivedCallback receivedCallback_ = nullptr;
   void* receivedUserData_ = nullptr;
 
+  SmsDecodedCallback decodedCallback_ = nullptr;
+  void* decodedUserData_ = nullptr;
+
   SmsErrorCallback errorCallback_ = nullptr;
   void* errorUserData_ = nullptr;
+
+  SmsStorageCallback storageCallback_ = nullptr;
+  void* storageUserData_ = nullptr;
 
   ConcatSlot concatSlots_[kMaxConcatMessages];
 };

@@ -6,7 +6,11 @@
 
 struct TestContext {
   SmsMessage lastMessage;
+  SmsMessage lastDecodedMessage;
+  SmsStorageNotification lastStorage;
   int receivedCount;
+  int decodedCount;
+  int storageCount;
   char lastError[64];
   char lastRawLine[384];
   int errorCount;
@@ -173,11 +177,23 @@ static void captureSms(const SmsMessage& message, void* userData) {
   ctx->receivedCount++;
 }
 
+static void captureDecodedSms(const SmsMessage& message, void* userData) {
+  TestContext* ctx = static_cast<TestContext*>(userData);
+  ctx->lastDecodedMessage = message;
+  ctx->decodedCount++;
+}
+
 static void captureError(const char* reason, const char* rawLine, void* userData) {
   TestContext* ctx = static_cast<TestContext*>(userData);
   copyText(ctx->lastError, sizeof(ctx->lastError), reason);
   copyText(ctx->lastRawLine, sizeof(ctx->lastRawLine), rawLine);
   ctx->errorCount++;
+}
+
+static void captureStorage(const SmsStorageNotification& notification, void* userData) {
+  TestContext* ctx = static_cast<TestContext*>(userData);
+  ctx->lastStorage = notification;
+  ctx->storageCount++;
 }
 
 void test_cmt_plus_pdu_emits_sms_message() {
@@ -209,6 +225,55 @@ void test_non_sms_urc_is_not_consumed() {
 
   TEST_ASSERT_FALSE(core.onUrc("+CEREG: 0,1", 100));
   TEST_ASSERT_FALSE(ctx.decoderCalled);
+}
+
+void test_cmti_urc_emits_storage_notification() {
+  TestContext ctx;
+  resetContext(ctx);
+  SmsReceiverCore core;
+  core.begin(fakeDecodePdu, &ctx);
+  core.setStorageCallback(captureStorage, &ctx);
+
+  TEST_ASSERT_TRUE(core.onUrc("+CMTI: \"SM\",37", 100));
+
+  TEST_ASSERT_EQUAL(1, ctx.storageCount);
+  TEST_ASSERT_EQUAL_STRING("SM", ctx.lastStorage.storage);
+  TEST_ASSERT_EQUAL(37, ctx.lastStorage.index);
+  TEST_ASSERT_FALSE(ctx.decoderCalled);
+}
+
+void test_process_stored_pdu_decodes_without_cmt_header() {
+  TestContext ctx;
+  resetContext(ctx);
+  SmsReceiverCore core;
+  core.begin(fakeDecodePdu, &ctx);
+  core.setReceivedCallback(captureSms, &ctx);
+  core.setErrorCallback(captureError, &ctx);
+
+  TEST_ASSERT_TRUE(core.processPdu("0891683108200505F0", 100));
+
+  TEST_ASSERT_TRUE(ctx.decoderCalled);
+  TEST_ASSERT_EQUAL(1, ctx.receivedCount);
+  TEST_ASSERT_EQUAL_STRING("0891683108200505F0", ctx.lastMessage.pdu);
+  TEST_ASSERT_EQUAL(0, ctx.errorCount);
+}
+
+void test_stored_concat_part_emits_decoded_callback_before_merge() {
+  TestContext ctx;
+  resetContext(ctx);
+  SmsReceiverCore core;
+  core.begin(fakeDecodeConcatByPdu, &ctx);
+  core.setDecodedCallback(captureDecodedSms, &ctx);
+  core.setReceivedCallback(captureSms, &ctx);
+
+  TEST_ASSERT_TRUE(core.processPdu("AA01", 100));
+
+  TEST_ASSERT_EQUAL(1, ctx.decodedCount);
+  TEST_ASSERT_EQUAL(0, ctx.receivedCount);
+  TEST_ASSERT_TRUE(ctx.lastDecodedMessage.isConcat);
+  TEST_ASSERT_EQUAL(42, ctx.lastDecodedMessage.concatRef);
+  TEST_ASSERT_EQUAL(1, ctx.lastDecodedMessage.concatPart);
+  TEST_ASSERT_EQUAL(3, ctx.lastDecodedMessage.concatTotal);
 }
 
 void test_non_hex_pdu_reports_error() {
@@ -460,6 +525,9 @@ int main(int argc, char** argv) {
   UNITY_BEGIN();
   RUN_TEST(test_cmt_plus_pdu_emits_sms_message);
   RUN_TEST(test_non_sms_urc_is_not_consumed);
+  RUN_TEST(test_cmti_urc_emits_storage_notification);
+  RUN_TEST(test_process_stored_pdu_decodes_without_cmt_header);
+  RUN_TEST(test_stored_concat_part_emits_decoded_callback_before_merge);
   RUN_TEST(test_non_hex_pdu_reports_error);
   RUN_TEST(test_odd_length_pdu_reports_error);
   RUN_TEST(test_decode_failure_reports_error);
