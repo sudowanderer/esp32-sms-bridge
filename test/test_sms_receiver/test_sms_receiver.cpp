@@ -6,7 +6,9 @@
 
 struct TestContext {
   SmsMessage lastMessage;
+  SmsStorageNotification lastStorage;
   int receivedCount;
+  int storageCount;
   char lastError[64];
   char lastRawLine[384];
   int errorCount;
@@ -180,6 +182,12 @@ static void captureError(const char* reason, const char* rawLine, void* userData
   ctx->errorCount++;
 }
 
+static void captureStorage(const SmsStorageNotification& notification, void* userData) {
+  TestContext* ctx = static_cast<TestContext*>(userData);
+  ctx->lastStorage = notification;
+  ctx->storageCount++;
+}
+
 void test_cmt_plus_pdu_emits_sms_message() {
   TestContext ctx;
   resetContext(ctx);
@@ -209,6 +217,37 @@ void test_non_sms_urc_is_not_consumed() {
 
   TEST_ASSERT_FALSE(core.onUrc("+CEREG: 0,1", 100));
   TEST_ASSERT_FALSE(ctx.decoderCalled);
+}
+
+void test_cmti_urc_emits_storage_notification() {
+  TestContext ctx;
+  resetContext(ctx);
+  SmsReceiverCore core;
+  core.begin(fakeDecodePdu, &ctx);
+  core.setStorageCallback(captureStorage, &ctx);
+
+  TEST_ASSERT_TRUE(core.onUrc("+CMTI: \"SM\",37", 100));
+
+  TEST_ASSERT_EQUAL(1, ctx.storageCount);
+  TEST_ASSERT_EQUAL_STRING("SM", ctx.lastStorage.storage);
+  TEST_ASSERT_EQUAL(37, ctx.lastStorage.index);
+  TEST_ASSERT_FALSE(ctx.decoderCalled);
+}
+
+void test_process_stored_pdu_decodes_without_cmt_header() {
+  TestContext ctx;
+  resetContext(ctx);
+  SmsReceiverCore core;
+  core.begin(fakeDecodePdu, &ctx);
+  core.setReceivedCallback(captureSms, &ctx);
+  core.setErrorCallback(captureError, &ctx);
+
+  TEST_ASSERT_TRUE(core.processPdu("0891683108200505F0", 100));
+
+  TEST_ASSERT_TRUE(ctx.decoderCalled);
+  TEST_ASSERT_EQUAL(1, ctx.receivedCount);
+  TEST_ASSERT_EQUAL_STRING("0891683108200505F0", ctx.lastMessage.pdu);
+  TEST_ASSERT_EQUAL(0, ctx.errorCount);
 }
 
 void test_non_hex_pdu_reports_error() {
@@ -460,6 +499,8 @@ int main(int argc, char** argv) {
   UNITY_BEGIN();
   RUN_TEST(test_cmt_plus_pdu_emits_sms_message);
   RUN_TEST(test_non_sms_urc_is_not_consumed);
+  RUN_TEST(test_cmti_urc_emits_storage_notification);
+  RUN_TEST(test_process_stored_pdu_decodes_without_cmt_header);
   RUN_TEST(test_non_hex_pdu_reports_error);
   RUN_TEST(test_odd_length_pdu_reports_error);
   RUN_TEST(test_decode_failure_reports_error);

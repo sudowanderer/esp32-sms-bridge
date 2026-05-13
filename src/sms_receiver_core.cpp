@@ -18,11 +18,16 @@ bool SmsReceiverCore::onUrc(const char* line, uint32_t nowMs) {
   }
 
   if (awaitingPdu_) {
-    handlePduLine(line, nowMs);
+    (void)handlePduLine(line, nowMs);
     return true;
   }
 
   if (!startsWith(line, "+CMT:")) {
+    SmsStorageNotification notification = {};
+    if (parseCmtiLine(line, notification)) {
+      emitStorage(notification);
+      return true;
+    }
     return false;
   }
 
@@ -31,6 +36,14 @@ bool SmsReceiverCore::onUrc(const char* line, uint32_t nowMs) {
   pduDeadlineMs_ = nowMs + kPduWaitTimeoutMs;
   copyText(cmtHeader_, sizeof(cmtHeader_), line);
   return true;
+}
+
+bool SmsReceiverCore::processPdu(const char* pdu, uint32_t nowMs) {
+  if (pdu == nullptr || pdu[0] == '\0') {
+    return false;
+  }
+
+  return handlePduLine(pdu, nowMs);
 }
 
 void SmsReceiverCore::poll(uint32_t nowMs) {
@@ -46,7 +59,7 @@ void SmsReceiverCore::poll(uint32_t nowMs) {
 
     if (static_cast<int32_t>(nowMs - (concatSlots_[i].firstPartMs + kConcatTimeoutMs)) >= 0) {
       emitError("concat_timeout", concatSlots_[i].baseMessage.pdu);
-      emitConcatSlot(i, false);
+      (void)emitConcatSlot(i, false);
     }
   }
 }
@@ -61,47 +74,52 @@ void SmsReceiverCore::setErrorCallback(SmsErrorCallback callback, void* userData
   errorUserData_ = userData;
 }
 
-void SmsReceiverCore::handlePduLine(const char* line, uint32_t nowMs) {
+void SmsReceiverCore::setStorageCallback(SmsStorageCallback callback, void* userData) {
+  storageCallback_ = callback;
+  storageUserData_ = userData;
+}
+
+bool SmsReceiverCore::handlePduLine(const char* line, uint32_t nowMs) {
   awaitingPdu_ = false;
 
   if (!isHexString(line)) {
     emitError("pdu_not_hex", line);
-    return;
+    return false;
   }
 
   if (decoder_ == nullptr) {
     emitError("pdu_decoder_missing", line);
-    return;
+    return false;
   }
 
   SmsMessage message = {};
   char error[48] = {};
   if (!decoder_(line, &message, error, sizeof(error), decoderUserData_)) {
     emitError(error[0] != '\0' ? error : "pdu_decode_failed", line);
-    return;
+    return false;
   }
 
   copyText(message.pdu, sizeof(message.pdu), line);
 
-  handleDecodedMessage(message, nowMs, line);
+  return handleDecodedMessage(message, nowMs, line);
 }
 
-void SmsReceiverCore::handleDecodedMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu) {
+bool SmsReceiverCore::handleDecodedMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu) {
   if (message.isConcat && message.concatTotal > 1) {
-    handleConcatMessage(message, nowMs, rawPdu);
-    return;
+    return handleConcatMessage(message, nowMs, rawPdu);
   }
 
   if (receivedCallback_ != nullptr) {
     receivedCallback_(message, receivedUserData_);
   }
+  return true;
 }
 
-void SmsReceiverCore::handleConcatMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu) {
+bool SmsReceiverCore::handleConcatMessage(const SmsMessage& message, uint32_t nowMs, const char* rawPdu) {
   if (message.concatPart == 0 || message.concatTotal == 0 || message.concatPart > message.concatTotal ||
       message.concatTotal > kMaxConcatParts) {
     emitError("concat_invalid_part", rawPdu);
-    return;
+    return false;
   }
 
   int slotIndex = findConcatSlot(message);
@@ -109,7 +127,7 @@ void SmsReceiverCore::handleConcatMessage(const SmsMessage& message, uint32_t no
     slotIndex = findFreeConcatSlot();
     if (slotIndex < 0) {
       emitError("concat_cache_full", rawPdu);
-      return;
+      return false;
     }
 
     ConcatSlot& slot = concatSlots_[slotIndex];
@@ -128,7 +146,7 @@ void SmsReceiverCore::handleConcatMessage(const SmsMessage& message, uint32_t no
   ConcatSlot& slot = concatSlots_[slotIndex];
   const uint8_t partIndex = static_cast<uint8_t>(message.concatPart - 1);
   if (slot.partValid[partIndex]) {
-    return;
+    return true;
   }
 
   slot.partValid[partIndex] = true;
@@ -136,8 +154,10 @@ void SmsReceiverCore::handleConcatMessage(const SmsMessage& message, uint32_t no
   slot.receivedParts++;
 
   if (slot.receivedParts >= slot.totalParts) {
-    emitConcatSlot(static_cast<uint8_t>(slotIndex), true);
+    return emitConcatSlot(static_cast<uint8_t>(slotIndex), true);
   }
+
+  return true;
 }
 
 int SmsReceiverCore::findConcatSlot(const SmsMessage& message) const {
@@ -177,9 +197,9 @@ void SmsReceiverCore::clearConcatSlots() {
   }
 }
 
-void SmsReceiverCore::emitConcatSlot(uint8_t slotIndex, bool complete) {
+bool SmsReceiverCore::emitConcatSlot(uint8_t slotIndex, bool complete) {
   if (slotIndex >= kMaxConcatMessages || !concatSlots_[slotIndex].inUse) {
-    return;
+    return false;
   }
 
   ConcatSlot& slot = concatSlots_[slotIndex];
@@ -217,12 +237,61 @@ void SmsReceiverCore::emitConcatSlot(uint8_t slotIndex, bool complete) {
   }
 
   clearConcatSlot(slotIndex);
+  return true;
 }
 
 void SmsReceiverCore::emitError(const char* reason, const char* rawLine) {
   if (errorCallback_ != nullptr) {
     errorCallback_(reason, rawLine, errorUserData_);
   }
+}
+
+void SmsReceiverCore::emitStorage(const SmsStorageNotification& notification) {
+  if (storageCallback_ != nullptr) {
+    storageCallback_(notification, storageUserData_);
+  }
+}
+
+bool SmsReceiverCore::parseCmtiLine(const char* line, SmsStorageNotification& notification) {
+  if (!startsWith(line, "+CMTI:")) {
+    return false;
+  }
+
+  const char* quoteStart = strchr(line, '"');
+  if (quoteStart == nullptr) {
+    return false;
+  }
+
+  const char* quoteEnd = strchr(quoteStart + 1, '"');
+  if (quoteEnd == nullptr || quoteEnd == quoteStart + 1) {
+    return false;
+  }
+
+  const size_t storageLen = static_cast<size_t>(quoteEnd - quoteStart - 1);
+  if (storageLen >= sizeof(notification.storage)) {
+    return false;
+  }
+
+  const char* comma = strchr(quoteEnd + 1, ',');
+  if (comma == nullptr || comma[1] == '\0') {
+    return false;
+  }
+
+  uint32_t index = 0;
+  for (const char* p = comma + 1; *p != '\0'; ++p) {
+    if (*p < '0' || *p > '9') {
+      return false;
+    }
+    index = (index * 10) + static_cast<uint32_t>(*p - '0');
+    if (index > 65535) {
+      return false;
+    }
+  }
+
+  memcpy(notification.storage, quoteStart + 1, storageLen);
+  notification.storage[storageLen] = '\0';
+  notification.index = static_cast<uint16_t>(index);
+  return true;
 }
 
 bool SmsReceiverCore::startsWith(const char* value, const char* prefix) {

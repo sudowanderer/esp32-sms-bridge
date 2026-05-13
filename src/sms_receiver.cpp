@@ -59,12 +59,20 @@ bool smsReceiverOnUrc(const char* line) {
   return smsReceiverCore.onUrc(line, millis());
 }
 
+bool smsReceiverProcessStoredPdu(const char* pdu) {
+  return smsReceiverCore.processPdu(pdu, millis());
+}
+
 void smsReceiverSetCallback(SmsReceivedCallback callback, void* userData) {
   smsReceiverCore.setReceivedCallback(callback, userData);
 }
 
 void smsReceiverSetErrorCallback(SmsErrorCallback callback, void* userData) {
   smsReceiverCore.setErrorCallback(callback, userData);
+}
+
+void smsReceiverSetStorageCallback(SmsStorageCallback callback, void* userData) {
+  smsReceiverCore.setStorageCallback(callback, userData);
 }
 
 void smsReceiverPoll(uint32_t nowMs) {

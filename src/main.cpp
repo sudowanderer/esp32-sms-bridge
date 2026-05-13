@@ -7,6 +7,7 @@
 #include "modem_at.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
+#include "sms_storage_reader_core.h"
 #include "web_server.h"
 #include "wifi_manager.h"
 
@@ -14,6 +15,10 @@ static constexpr uint32_t kLogIntervalMs = 1000;
 static constexpr uint32_t kCommandTimeoutMs = 3000;
 
 static uint32_t lastLogMs = 0;
+static SmsStorageReaderCore smsStorageReader;
+static bool processingStoredPdu = false;
+static bool storedPduHadReceiveCallback = false;
+static bool storedPduQueued = false;
 
 static void printAtResult(ModemAtResult result, const char* response, void* userData) {
   const char* command = static_cast<const char*>(userData);
@@ -109,6 +114,11 @@ static void handleSmsReceived(const SmsMessage& message, void* userData) {
     logError(logMessage);
   }
   printSmsDebug(message, enqueued);
+
+  if (processingStoredPdu) {
+    storedPduHadReceiveCallback = true;
+    storedPduQueued = enqueued;
+  }
 }
 
 static void printSmsError(const char* reason, const char* rawLine, void* userData) {
@@ -133,6 +143,127 @@ static void handleModemUrc(const char* line, void* userData) {
 
   Serial.print("modem_urc=");
   Serial.println(line);
+}
+
+static const char* storageReaderEventName(SmsStorageReaderEvent event) {
+  switch (event) {
+    case SmsStorageReaderEvent::Enqueued:
+      return "enqueued";
+    case SmsStorageReaderEvent::QueueFull:
+      return "queue_full";
+    case SmsStorageReaderEvent::ReadCommandReady:
+      return "read_command_ready";
+    case SmsStorageReaderEvent::ReadFailed:
+      return "read_failed";
+    case SmsStorageReaderEvent::PduReady:
+      return "pdu_ready";
+    case SmsStorageReaderEvent::DeleteCommandReady:
+      return "delete_command_ready";
+    case SmsStorageReaderEvent::DeleteSucceeded:
+      return "delete_succeeded";
+    case SmsStorageReaderEvent::DeleteFailed:
+      return "delete_failed";
+  }
+
+  return "unknown";
+}
+
+static void handleStorageReaderStatus(const SmsStorageReaderStatus& status, void* userData) {
+  (void)userData;
+
+  char message[160];
+  snprintf(message,
+           sizeof(message),
+           "sms_storage event=%s storage=%s index=%u detail=%s",
+           storageReaderEventName(status.event),
+           status.storage,
+           static_cast<unsigned>(status.index),
+           status.detail);
+
+  if (status.event == SmsStorageReaderEvent::QueueFull || status.event == SmsStorageReaderEvent::ReadFailed ||
+      status.event == SmsStorageReaderEvent::DeleteFailed) {
+    logError(message);
+  } else {
+    logInfo(message);
+  }
+}
+
+static void handleSmsStorageNotification(const SmsStorageNotification& notification, void* userData) {
+  (void)userData;
+
+  char message[96];
+  snprintf(message,
+           sizeof(message),
+           "sms_cmti storage=%s index=%u",
+           notification.storage,
+           static_cast<unsigned>(notification.index));
+  logInfo(message);
+  Serial.println(message);
+  smsStorageReader.enqueue(notification);
+}
+
+static void handleStoredSmsDeleteResult(ModemAtResult result, const char* response, void* userData) {
+  (void)response;
+  (void)userData;
+
+  smsStorageReader.completeDelete(result);
+}
+
+static void submitStoredSmsDeleteIfReady() {
+  char command[32];
+  if (!smsStorageReader.messageQueued(command, sizeof(command))) {
+    return;
+  }
+
+  if (!modemAtSubmit(command, kCommandTimeoutMs, handleStoredSmsDeleteResult, nullptr)) {
+    logError("sms_storage_delete_submit_failed");
+    smsStorageReader.completeDelete(ModemAtResult::QueueFull);
+  }
+}
+
+static void handleStoredSmsReadResult(ModemAtResult result, const char* response, void* userData) {
+  (void)userData;
+
+  char pdu[sizeof(SmsMessage::pdu)];
+  if (!smsStorageReader.completeRead(result, response, pdu, sizeof(pdu))) {
+    return;
+  }
+
+  processingStoredPdu = true;
+  storedPduHadReceiveCallback = false;
+  storedPduQueued = false;
+  const bool accepted = smsReceiverProcessStoredPdu(pdu);
+  processingStoredPdu = false;
+
+  if (!accepted) {
+    smsStorageReader.messageRejected();
+    return;
+  }
+
+  if (!storedPduHadReceiveCallback) {
+    smsStorageReader.messageRejected();
+    return;
+  }
+
+  if (storedPduHadReceiveCallback && !storedPduQueued) {
+    smsStorageReader.messageRejected();
+    return;
+  }
+
+  submitStoredSmsDeleteIfReady();
+}
+
+static void submitStoredSmsReadIfReady() {
+  char command[32];
+  if (!smsStorageReader.nextReadCommand(command, sizeof(command))) {
+    return;
+  }
+
+  if (!modemAtSubmit(command, kCommandTimeoutMs, handleStoredSmsReadResult, nullptr)) {
+    logError("sms_storage_read_submit_failed");
+    char pdu[sizeof(SmsMessage::pdu)];
+    smsStorageReader.completeRead(ModemAtResult::QueueFull, "", pdu, sizeof(pdu));
+  }
 }
 
 static void submitStartupCommand(const char* command) {
@@ -172,6 +303,8 @@ void setup() {
 
   modemAtBegin();
   smsReceiverBegin();
+  smsStorageReader.begin();
+  smsStorageReader.setStatusCallback(handleStorageReaderStatus, nullptr);
   smsQueueBegin();
   configStoreBegin();
   wifiManagerBegin();
@@ -180,6 +313,7 @@ void setup() {
   webServerBegin();
   smsReceiverSetCallback(handleSmsReceived, nullptr);
   smsReceiverSetErrorCallback(printSmsError, nullptr);
+  smsReceiverSetStorageCallback(handleSmsStorageNotification, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
   submitStartupCommands();
 }
@@ -187,6 +321,7 @@ void setup() {
 void loop() {
   modemAtPoll();
   smsReceiverPoll(millis());
+  submitStoredSmsReadIfReady();
   cellularStatusPoll(millis());
   wifiManagerPoll(millis());
   webServerPoll();
