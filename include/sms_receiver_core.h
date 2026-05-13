@@ -21,6 +21,7 @@ class SmsReceiverCore {
   void poll(uint32_t nowMs);
 
   void setReceivedCallback(SmsReceivedCallback callback, void* userData);
+  void setDecodedCallback(SmsDecodedCallback callback, void* userData);
   void setErrorCallback(SmsErrorCallback callback, void* userData);
   void setStorageCallback(SmsStorageCallback callback, void* userData);
 
@@ -61,6 +62,9 @@ class SmsReceiverCore {
 
   SmsReceivedCallback receivedCallback_ = nullptr;
   void* receivedUserData_ = nullptr;
+
+  SmsDecodedCallback decodedCallback_ = nullptr;
+  void* decodedUserData_ = nullptr;
 
   SmsErrorCallback errorCallback_ = nullptr;
   void* errorUserData_ = nullptr;

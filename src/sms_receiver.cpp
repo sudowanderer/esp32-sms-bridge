@@ -67,6 +67,10 @@ void smsReceiverSetCallback(SmsReceivedCallback callback, void* userData) {
   smsReceiverCore.setReceivedCallback(callback, userData);
 }
 
+void smsReceiverSetDecodedCallback(SmsDecodedCallback callback, void* userData) {
+  smsReceiverCore.setDecodedCallback(callback, userData);
+}
+
 void smsReceiverSetErrorCallback(SmsErrorCallback callback, void* userData) {
   smsReceiverCore.setErrorCallback(callback, userData);
 }

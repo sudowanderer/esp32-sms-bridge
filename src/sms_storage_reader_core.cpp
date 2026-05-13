@@ -5,8 +5,12 @@
 
 void SmsStorageReaderCore::begin() {
   memset(queue_, 0, sizeof(queue_));
+  memset(deleteQueue_, 0, sizeof(deleteQueue_));
+  memset(concatGroups_, 0, sizeof(concatGroups_));
   head_ = 0;
   count_ = 0;
+  deleteHead_ = 0;
+  deleteCount_ = 0;
   clearActive();
   statusCallback_ = nullptr;
   statusUserData_ = nullptr;
@@ -89,13 +93,52 @@ bool SmsStorageReaderCore::completeRead(ModemAtResult result, const char* respon
   return true;
 }
 
-bool SmsStorageReaderCore::messageQueued(char* deleteCommand, size_t deleteCommandCapacity) {
-  if (activeState_ != ActiveState::AwaitingMessageQueue || deleteCommand == nullptr || deleteCommandCapacity == 0) {
+bool SmsStorageReaderCore::messageAccepted(const SmsMessage& message, bool queued) {
+  if (activeState_ != ActiveState::AwaitingMessageQueue) {
     return false;
   }
 
-  snprintf(deleteCommand, deleteCommandCapacity, "AT+CMGD=%u", static_cast<unsigned>(active_.index));
+  if (message.isConcat && message.concatTotal > 1) {
+    if (!rememberConcatPart(message)) {
+      clearActive();
+      return false;
+    }
+
+    if (queued) {
+      (void)enqueueConcatDeletes(message);
+    }
+
+    clearActive();
+    return true;
+  }
+
+  if (queued) {
+    (void)enqueueDelete(active_);
+  }
+
+  clearActive();
+  return true;
+}
+
+bool SmsStorageReaderCore::messageQueued(char* deleteCommand, size_t deleteCommandCapacity) {
+  if (activeState_ == ActiveState::AwaitingMessageQueue) {
+    (void)enqueueDelete(active_);
+    clearActive();
+  }
+
+  return nextDeleteCommand(deleteCommand, deleteCommandCapacity);
+}
+
+bool SmsStorageReaderCore::nextDeleteCommand(char* deleteCommand, size_t deleteCommandCapacity) {
+  if (activeState_ != ActiveState::None || deleteCount_ == 0 || deleteCommand == nullptr || deleteCommandCapacity == 0) {
+    return false;
+  }
+
+  active_ = deleteQueue_[deleteHead_];
+  deleteHead_ = static_cast<uint8_t>((deleteHead_ + 1) % kDeleteCapacity);
+  deleteCount_--;
   activeState_ = ActiveState::Deleting;
+  snprintf(deleteCommand, deleteCommandCapacity, "AT+CMGD=%u", static_cast<unsigned>(active_.index));
   emit(SmsStorageReaderEvent::DeleteCommandReady, deleteCommand);
   return true;
 }
@@ -122,6 +165,122 @@ bool SmsStorageReaderCore::isActive() const {
 
 uint8_t SmsStorageReaderCore::queuedCount() const {
   return count_;
+}
+
+bool SmsStorageReaderCore::rememberConcatPart(const SmsMessage& message) {
+  if (message.concatPart == 0 || message.concatTotal == 0 || message.concatPart > message.concatTotal ||
+      message.concatTotal > kMaxConcatParts) {
+    return false;
+  }
+
+  int groupIndex = findConcatGroup(message);
+  if (groupIndex < 0) {
+    groupIndex = findFreeConcatGroup();
+    if (groupIndex < 0) {
+      emit(SmsStorageReaderEvent::QueueFull, "concat_group_full");
+      return false;
+    }
+
+    ConcatGroup& group = concatGroups_[groupIndex];
+    memset(&group, 0, sizeof(group));
+    group.inUse = true;
+    copyText(group.storage, sizeof(group.storage), active_.storage);
+    copyText(group.sender, sizeof(group.sender), message.sender);
+    group.ref = message.concatRef;
+    group.total = message.concatTotal;
+  }
+
+  ConcatGroup& group = concatGroups_[groupIndex];
+  const uint8_t partIndex = static_cast<uint8_t>(message.concatPart - 1);
+  group.partValid[partIndex] = true;
+  group.partIndex[partIndex] = active_.index;
+  return true;
+}
+
+bool SmsStorageReaderCore::enqueueConcatDeletes(const SmsMessage& message) {
+  const int groupIndex = findConcatGroup(message);
+  if (groupIndex < 0) {
+    return false;
+  }
+
+  ConcatGroup& group = concatGroups_[groupIndex];
+  bool ok = true;
+  for (uint8_t i = 0; i < group.total; ++i) {
+    if (!group.partValid[i]) {
+      continue;
+    }
+
+    StoredSms storedSms = {};
+    copyText(storedSms.storage, sizeof(storedSms.storage), group.storage);
+    storedSms.index = group.partIndex[i];
+    ok = enqueueDelete(storedSms) && ok;
+  }
+
+  clearConcatGroup(static_cast<uint8_t>(groupIndex));
+  return ok;
+}
+
+bool SmsStorageReaderCore::enqueueDelete(const StoredSms& storedSms) {
+  if (storedSms.index == 0 || storedSms.storage[0] == '\0') {
+    return false;
+  }
+
+  for (uint8_t i = 0; i < deleteCount_; ++i) {
+    const uint8_t index = static_cast<uint8_t>((deleteHead_ + i) % kDeleteCapacity);
+    if (deleteQueue_[index].index == storedSms.index && strcmp(deleteQueue_[index].storage, storedSms.storage) == 0) {
+      return true;
+    }
+  }
+
+  if (activeState_ == ActiveState::Deleting && active_.index == storedSms.index &&
+      strcmp(active_.storage, storedSms.storage) == 0) {
+    return true;
+  }
+
+  if (deleteCount_ >= kDeleteCapacity) {
+    const StoredSms previousActive = active_;
+    const ActiveState previousState = activeState_;
+    active_ = storedSms;
+    emit(SmsStorageReaderEvent::QueueFull, "delete_queue_full");
+    active_ = previousActive;
+    activeState_ = previousState;
+    return false;
+  }
+
+  const uint8_t index = static_cast<uint8_t>((deleteHead_ + deleteCount_) % kDeleteCapacity);
+  deleteQueue_[index] = storedSms;
+  deleteCount_++;
+  return true;
+}
+
+int SmsStorageReaderCore::findConcatGroup(const SmsMessage& message) const {
+  for (uint8_t i = 0; i < kMaxConcatGroups; ++i) {
+    const ConcatGroup& group = concatGroups_[i];
+    if (group.inUse && strcmp(group.storage, active_.storage) == 0 && strcmp(group.sender, message.sender) == 0 &&
+        group.ref == message.concatRef && group.total == message.concatTotal) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int SmsStorageReaderCore::findFreeConcatGroup() const {
+  for (uint8_t i = 0; i < kMaxConcatGroups; ++i) {
+    if (!concatGroups_[i].inUse) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+void SmsStorageReaderCore::clearConcatGroup(uint8_t groupIndex) {
+  if (groupIndex >= kMaxConcatGroups) {
+    return;
+  }
+
+  memset(&concatGroups_[groupIndex], 0, sizeof(concatGroups_[groupIndex]));
 }
 
 void SmsStorageReaderCore::copyText(char* dest, size_t destCapacity, const char* source) {

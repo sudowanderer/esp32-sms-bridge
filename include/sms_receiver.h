@@ -21,6 +21,7 @@ struct SmsStorageNotification {
 };
 
 using SmsReceivedCallback = void (*)(const SmsMessage& message, void* userData);
+using SmsDecodedCallback = void (*)(const SmsMessage& message, void* userData);
 using SmsErrorCallback = void (*)(const char* reason, const char* rawLine, void* userData);
 using SmsStorageCallback = void (*)(const SmsStorageNotification& notification, void* userData);
 
@@ -33,6 +34,7 @@ bool smsReceiverOnUrc(const char* line);
 bool smsReceiverProcessStoredPdu(const char* pdu);
 
 void smsReceiverSetCallback(SmsReceivedCallback callback, void* userData);
+void smsReceiverSetDecodedCallback(SmsDecodedCallback callback, void* userData);
 void smsReceiverSetErrorCallback(SmsErrorCallback callback, void* userData);
 void smsReceiverSetStorageCallback(SmsStorageCallback callback, void* userData);
 

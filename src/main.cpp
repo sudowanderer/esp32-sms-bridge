@@ -17,8 +17,10 @@ static constexpr uint32_t kCommandTimeoutMs = 3000;
 static uint32_t lastLogMs = 0;
 static SmsStorageReaderCore smsStorageReader;
 static bool processingStoredPdu = false;
+static bool storedPduHadDecodedCallback = false;
 static bool storedPduHadReceiveCallback = false;
 static bool storedPduQueued = false;
+static SmsMessage storedPduDecodedMessage;
 
 static void printAtResult(ModemAtResult result, const char* response, void* userData) {
   const char* command = static_cast<const char*>(userData);
@@ -121,6 +123,17 @@ static void handleSmsReceived(const SmsMessage& message, void* userData) {
   }
 }
 
+static void handleSmsDecoded(const SmsMessage& message, void* userData) {
+  (void)userData;
+
+  if (!processingStoredPdu) {
+    return;
+  }
+
+  storedPduDecodedMessage = message;
+  storedPduHadDecodedCallback = true;
+}
+
 static void printSmsError(const char* reason, const char* rawLine, void* userData) {
   (void)userData;
 
@@ -211,7 +224,7 @@ static void handleStoredSmsDeleteResult(ModemAtResult result, const char* respon
 
 static void submitStoredSmsDeleteIfReady() {
   char command[32];
-  if (!smsStorageReader.messageQueued(command, sizeof(command))) {
+  if (!smsStorageReader.nextDeleteCommand(command, sizeof(command))) {
     return;
   }
 
@@ -230,8 +243,10 @@ static void handleStoredSmsReadResult(ModemAtResult result, const char* response
   }
 
   processingStoredPdu = true;
+  storedPduHadDecodedCallback = false;
   storedPduHadReceiveCallback = false;
   storedPduQueued = false;
+  memset(&storedPduDecodedMessage, 0, sizeof(storedPduDecodedMessage));
   const bool accepted = smsReceiverProcessStoredPdu(pdu);
   processingStoredPdu = false;
 
@@ -240,15 +255,12 @@ static void handleStoredSmsReadResult(ModemAtResult result, const char* response
     return;
   }
 
-  if (!storedPduHadReceiveCallback) {
+  if (!storedPduHadDecodedCallback) {
     smsStorageReader.messageRejected();
     return;
   }
 
-  if (storedPduHadReceiveCallback && !storedPduQueued) {
-    smsStorageReader.messageRejected();
-    return;
-  }
+  smsStorageReader.messageAccepted(storedPduDecodedMessage, storedPduHadReceiveCallback && storedPduQueued);
 
   submitStoredSmsDeleteIfReady();
 }
@@ -312,6 +324,7 @@ void setup() {
   forwarderHttpBegin();
   webServerBegin();
   smsReceiverSetCallback(handleSmsReceived, nullptr);
+  smsReceiverSetDecodedCallback(handleSmsDecoded, nullptr);
   smsReceiverSetErrorCallback(printSmsError, nullptr);
   smsReceiverSetStorageCallback(handleSmsStorageNotification, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
@@ -321,6 +334,7 @@ void setup() {
 void loop() {
   modemAtPoll();
   smsReceiverPoll(millis());
+  submitStoredSmsDeleteIfReady();
   submitStoredSmsReadIfReady();
   cellularStatusPoll(millis());
   wifiManagerPoll(millis());

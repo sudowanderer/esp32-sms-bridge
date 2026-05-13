@@ -69,6 +69,11 @@ void SmsReceiverCore::setReceivedCallback(SmsReceivedCallback callback, void* us
   receivedUserData_ = userData;
 }
 
+void SmsReceiverCore::setDecodedCallback(SmsDecodedCallback callback, void* userData) {
+  decodedCallback_ = callback;
+  decodedUserData_ = userData;
+}
+
 void SmsReceiverCore::setErrorCallback(SmsErrorCallback callback, void* userData) {
   errorCallback_ = callback;
   errorUserData_ = userData;
@@ -100,6 +105,10 @@ bool SmsReceiverCore::handlePduLine(const char* line, uint32_t nowMs) {
   }
 
   copyText(message.pdu, sizeof(message.pdu), line);
+
+  if (decodedCallback_ != nullptr) {
+    decodedCallback_(message, decodedUserData_);
+  }
 
   return handleDecodedMessage(message, nowMs, line);
 }
