@@ -11,7 +11,7 @@
 #include "web_server.h"
 #include "wifi_manager.h"
 
-static constexpr uint32_t kLogIntervalMs = 1000;
+static constexpr uint32_t kHeartbeatLogIntervalMs = 5000;
 static constexpr uint32_t kCommandTimeoutMs = 3000;
 
 static uint32_t lastLogMs = 0;
@@ -342,7 +342,7 @@ void loop() {
   forwarderHttpPoll(millis());
 
   const uint32_t now = millis();
-  if (now - lastLogMs >= kLogIntervalMs) {
+  if (now - lastLogMs >= kHeartbeatLogIntervalMs) {
     lastLogMs = now;
 
     Serial.print("uptime_ms=");
