@@ -5,6 +5,7 @@
 #include "forwarder_http.h"
 #include "logger.h"
 #include "modem_at.h"
+#include "modem_commands.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
 #include "sms_storage_reader_core.h"
@@ -290,10 +291,10 @@ static void submitStartupCommand(const char* command) {
 }
 
 static void submitStartupCommands() {
-  submitStartupCommand("AT");
-  submitStartupCommand("AT+CMGF=0");
-  submitStartupCommand("AT+CNMI=2,2,0,0,0");
-  submitStartupCommand("AT+CEREG?");
+  submitStartupCommand(ModemCommands::attention());
+  submitStartupCommand(ModemCommands::smsPduMode());
+  submitStartupCommand(ModemCommands::smsDirectUrcMode());
+  submitStartupCommand(ModemCommands::queryRegistration());
 }
 
 void setup() {

@@ -1,6 +1,7 @@
 #include "sms_storage_reader_core.h"
 
-#include <stdio.h>
+#include "modem_commands.h"
+
 #include <string.h>
 
 void SmsStorageReaderCore::begin() {
@@ -64,7 +65,10 @@ bool SmsStorageReaderCore::nextReadCommand(char* command, size_t commandCapacity
   head_ = static_cast<uint8_t>((head_ + 1) % kCapacity);
   count_--;
   activeState_ = ActiveState::Reading;
-  snprintf(command, commandCapacity, "AT+CMGR=%u", static_cast<unsigned>(active_.index));
+  if (!ModemCommands::buildReadStoredSms(active_.index, command, commandCapacity)) {
+    clearActive();
+    return false;
+  }
   emit(SmsStorageReaderEvent::ReadCommandReady, command);
   return true;
 }
@@ -138,7 +142,10 @@ bool SmsStorageReaderCore::nextDeleteCommand(char* deleteCommand, size_t deleteC
   deleteHead_ = static_cast<uint8_t>((deleteHead_ + 1) % kDeleteCapacity);
   deleteCount_--;
   activeState_ = ActiveState::Deleting;
-  snprintf(deleteCommand, deleteCommandCapacity, "AT+CMGD=%u", static_cast<unsigned>(active_.index));
+  if (!ModemCommands::buildDeleteStoredSms(active_.index, deleteCommand, deleteCommandCapacity)) {
+    clearActive();
+    return false;
+  }
   emit(SmsStorageReaderEvent::DeleteCommandReady, deleteCommand);
   return true;
 }

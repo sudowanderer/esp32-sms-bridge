@@ -1,5 +1,7 @@
 #include "modem_at_core.h"
 
+#include "modem_commands.h"
+
 #include <string.h>
 
 void ModemAtCore::begin(uint32_t nowMs) {
@@ -182,7 +184,7 @@ bool ModemAtCore::currentCommandExpectsPlusLine(const char* line) const {
   }
 
   // 同一个前缀既可能是主动 URC，也可能是查询命令响应；这里先处理 v0 会主动查询的 CEREG。
-  if (startsWith(line, "+CEREG:") && startsWith(current_.text, "AT+CEREG?")) {
+  if (startsWith(line, "+CEREG:") && startsWith(current_.text, ModemCommands::queryRegistration())) {
     return true;
   }
 
