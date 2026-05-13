@@ -2,6 +2,7 @@
 
 #include "logger.h"
 #include "modem_at.h"
+#include "modem_commands.h"
 
 #include <Arduino.h>
 #include <stdio.h>
@@ -68,7 +69,7 @@ void cellularStatusPoll(uint32_t nowMs) {
     return;
   }
 
-  const char* command = requestCsq ? "AT+CSQ" : "AT+CEREG?";
+  const char* command = requestCsq ? ModemCommands::querySignal() : ModemCommands::queryRegistration();
   ModemAtCallback callback = requestCsq ? handleCsqResult : handleCeregResult;
   requestCsq = !requestCsq;
   nextPollMs = nowMs + kPollIntervalMs;
