@@ -473,6 +473,11 @@ String resp = sendATCommand(cmd.c_str(), 5000);
 | 设置全功能模式 | `AT+CFUN=1` |
 | 设置飞行模式 | `AT+CFUN=4` |
 
+首页 `Data connection` 不直接等同于 `AT+CGACT?` 中任意 cid 为 active。固件先用 `AT+CGDCONT?`
+建立 cid 到 APN 的映射，再用 `AT+CGACT?` 更新激活状态；APN 为 `IMS` 的 context 被视为运营商内部 IMS
+通道，不计入普通移动数据连接。因此 `cid=8, APN=IMS, active` 且 `cid=1, APN=3gnet, inactive`
+时，首页应显示 `Data connection: inactive`。
+
 当前问题：
 
 - Web 查询直接调用 `sendATCommand()`。

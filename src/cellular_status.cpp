@@ -37,8 +37,8 @@ static constexpr QueryStep kDynamicSteps[] = {
     QueryStep::ExtendedSignal,
     QueryStep::Registration,
     QueryStep::Operator,
-    QueryStep::PdpActivation,
     QueryStep::PdpContext,
+    QueryStep::PdpActivation,
 };
 
 static CellularStatusSnapshot snapshot = {};
@@ -135,6 +135,14 @@ static void handleQueryResult(ModemAtResult result, const char* response, void* 
   if (ok) {
     snprintf(message, sizeof(message), "cellular_status step=%s ok", stepName(activeStep));
     logInfo(message);
+    if (!activeStaticStep && activeStep == QueryStep::PdpActivation) {
+      snprintf(message,
+               sizeof(message),
+               "cellular_status data_connection=%s apn=%s",
+               snapshot.dataConnectionKnown ? (snapshot.dataConnectionActive ? "active" : "inactive") : "unknown",
+               snapshot.apn[0] != '\0' ? snapshot.apn : "unknown");
+      logInfo(message);
+    }
   } else {
     snprintf(message, sizeof(message), "cellular_status step=%s failed", stepName(activeStep));
     logWarn(message);

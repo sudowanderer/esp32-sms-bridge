@@ -3,6 +3,17 @@
 #include <stdint.h>
 
 struct CellularStatusSnapshot {
+  static constexpr uint8_t kMaxPdpContexts = 8;
+
+  struct PdpContext {
+    uint8_t cid;
+    bool known;
+    bool activationKnown;
+    bool active;
+    bool ignored;
+    char apn[32];
+  };
+
   bool signalKnown;
   uint8_t csqRssi;
   int16_t rssiDbm;
@@ -31,6 +42,8 @@ struct CellularStatusSnapshot {
   bool dataConnectionKnown;
   bool dataConnectionActive;
   char apn[64];
+  PdpContext pdpContexts[kMaxPdpContexts];
+  uint8_t pdpContextCount;
   uint32_t lastUpdatedMs;
 };
 
