@@ -141,6 +141,26 @@ void test_cmt_urc_does_not_pollute_running_command_response() {
   TEST_ASSERT_EQUAL_STRING("", ctx.response);
 }
 
+void test_modem_ready_urc_does_not_pollute_running_command_response() {
+  TestContext ctx;
+  resetContext(ctx);
+  ModemAtCore core;
+  core.begin(0);
+  core.setUrcCallback(captureUrc, &ctx);
+
+  TEST_ASSERT_TRUE(core.submit("AT+CMGF=0", 1000, captureAtResult, &ctx));
+  core.poll(10, captureWrite, &ctx);
+  feedLine(core, "+MATREADY");
+  feedLine(core, "+CPIN: READY");
+  feedLine(core, "OK");
+
+  TEST_ASSERT_EQUAL(2, ctx.urcCount);
+  TEST_ASSERT_EQUAL_STRING("+MATREADY", ctx.urcs[0]);
+  TEST_ASSERT_EQUAL_STRING("+CPIN: READY", ctx.urcs[1]);
+  TEST_ASSERT_EQUAL(ModemAtResult::Ok, ctx.lastResult);
+  TEST_ASSERT_EQUAL_STRING("", ctx.response);
+}
+
 void test_cmt_pdu_line_longer_than_legacy_buffer_is_emitted_intact() {
   TestContext ctx;
   resetContext(ctx);
@@ -225,6 +245,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_error_finishes_command);
   RUN_TEST(test_cme_error_finishes_command);
   RUN_TEST(test_cmt_urc_does_not_pollute_running_command_response);
+  RUN_TEST(test_modem_ready_urc_does_not_pollute_running_command_response);
   RUN_TEST(test_cmt_pdu_line_longer_than_legacy_buffer_is_emitted_intact);
   RUN_TEST(test_over_capacity_line_is_discarded_until_newline_and_parser_recovers);
   RUN_TEST(test_timeout_finishes_current_and_next_command_can_start);

@@ -135,13 +135,23 @@ MODEM_EN HIGH -> AT 返回 OK
    AT
    ```
 
-7. 关闭 PDP 数据连接，避免默认消耗流量：
+7. ML307R 可能上报模块业务命令可用：
 
    ```text
-   AT+CGACT=0,1
+   +MATREADY
    ```
 
-8. 设置短信自动上报：
+   当前固件不会在 `setup()` 中一次性塞满 AT 队列，而是在主循环中用启动状态机逐条提交命令。`AT`
+   返回 `OK` 只表示 UART 基础通信可用；`+MATREADY` 只作为 URC 记录，不再作为短信初始化的前置条件。
+   实测 ML307R 可能很晚上报或不稳定上报 `+MATREADY`，启动主线必须优先完成短信接收配置。
+
+8. 设置短信 PDU 模式：
+
+   ```text
+   AT+CMGF=0
+   ```
+
+9. 设置短信自动上报：
 
    ```text
    AT+CNMI=2,2,0,0,0
@@ -149,22 +159,31 @@ MODEM_EN HIGH -> AT 返回 OK
 
    该配置表示新短信直接通过串口上报。
 
-9. 设置短信 PDU 模式：
+10. 查询蜂窝网络注册状态：
 
    ```text
-   AT+CMGF=0
+   AT+CEREG?
    ```
 
-10. 等待蜂窝网络注册成功：
+   当前代码认为 `+CEREG:` 中状态为 `1` 或 `5` 时网络已注册：
 
-    ```text
-    AT+CEREG?
-    ```
+   - `1`：已注册本地网络
+   - `5`：已注册漫游网络
 
-    当前代码认为 `+CEREG:` 中状态为 `1` 或 `5` 时网络已注册：
+11. 启动主线完成后，后台 PDP guard 关闭普通数据 PDP 连接，避免默认消耗流量：
 
-    - `1`：已注册本地网络
-    - `5`：已注册漫游网络
+   ```text
+   AT+CGDCONT?
+   AT+CGACT?
+   AT+CGACT=0,1
+   ```
+
+   Guard 会先用 `AT+CGDCONT?` 建立 cid 到 APN 的映射，再用 `AT+CGACT?` 查询激活状态。只对 active
+   且 APN 不是 `IMS` 的 context 生成 `AT+CGACT=0,<cid>`；例如 `GIFFGAFF.COM` 会被视为普通数据 APN，
+   `IMS` 会被忽略，避免误关运营商 IMS context。若关闭返回 `ERROR`、`+CME ERROR` 或超时，固件会记录
+   `pdp_guard_status=command_failed` 并每 60 秒从查询开始重试一次。PDP guard 不阻塞 `AT+CMGF=0` /
+   `AT+CNMI=2,2,0,0,0` 短信初始化。
+
 
 重构注意：
 

@@ -51,6 +51,7 @@ static bool staticRetryNeeded = false;
 static uint8_t staticStepIndex = 0;
 static uint8_t dynamicStepIndex = 0;
 static QueryStep activeStep = QueryStep::ExtendedSignal;
+static bool startupComplete = false;
 
 static const char* commandForStep(QueryStep step) {
   switch (step) {
@@ -169,9 +170,23 @@ void cellularStatusBegin() {
   nextPollMs = now + kInitialDelayMs;
   nextDynamicRoundMs = now + kInitialDelayMs;
   nextStaticRetryMs = 0;
+  startupComplete = false;
+}
+
+void cellularStatusSetStartupComplete(bool complete) {
+  startupComplete = complete;
+  if (complete) {
+    const uint32_t now = millis();
+    nextPollMs = now;
+    nextDynamicRoundMs = now;
+  }
 }
 
 void cellularStatusPoll(uint32_t nowMs) {
+  if (!startupComplete) {
+    return;
+  }
+
   if (pending || static_cast<int32_t>(nowMs - nextPollMs) < 0) {
     return;
   }

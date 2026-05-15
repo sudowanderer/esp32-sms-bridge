@@ -175,6 +175,10 @@ bool ModemAtCore::isUrcLine(const char* line) const {
     return true;
   }
 
+  if (strcmp(line, "+MATREADY") == 0 || startsWith(line, "+CPIN:")) {
+    return true;
+  }
+
   return false;
 }
 

@@ -87,4 +87,8 @@ bool buildDeleteStoredSms(uint16_t index, char* output, size_t outputSize) {
   return buildIndexedCommand("AT+CMGD=", index, output, outputSize);
 }
 
+bool buildDeactivatePdpContext(uint8_t cid, char* output, size_t outputSize) {
+  return buildIndexedCommand("AT+CGACT=0,", cid, output, outputSize);
+}
+
 }  // namespace ModemCommands

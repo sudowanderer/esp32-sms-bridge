@@ -22,5 +22,6 @@ const char* queryPdpContext();
 
 bool buildReadStoredSms(uint16_t index, char* output, size_t outputSize);
 bool buildDeleteStoredSms(uint16_t index, char* output, size_t outputSize);
+bool buildDeactivatePdpContext(uint8_t cid, char* output, size_t outputSize);
 
 }  // namespace ModemCommands

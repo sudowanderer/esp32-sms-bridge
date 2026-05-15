@@ -6,12 +6,15 @@
 #include "logger.h"
 #include "modem_at.h"
 #include "modem_commands.h"
+#include "pdp_guard_core.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
 #include "sms_storage_reader_core.h"
-#include "startup_commands.h"
+#include "startup_sequencer_core.h"
 #include "web_server.h"
 #include "wifi_manager.h"
+
+#include <string.h>
 
 static constexpr uint32_t kHeartbeatLogIntervalMs = 5000;
 static constexpr uint32_t kCommandTimeoutMs = 3000;
@@ -23,6 +26,10 @@ static bool storedPduHadDecodedCallback = false;
 static bool storedPduHadReceiveCallback = false;
 static bool storedPduQueued = false;
 static SmsMessage storedPduDecodedMessage;
+static StartupSequencerCore startupSequencer;
+static PdpGuardCore pdpGuard;
+static bool startupSequencerWasComplete = false;
+static bool startupMatreadySeenLogged = false;
 
 static void printAtResult(ModemAtResult result, const char* response, void* userData) {
   const char* command = static_cast<const char*>(userData);
@@ -152,6 +159,12 @@ static void printSmsError(const char* reason, const char* rawLine, void* userDat
 static void handleModemUrc(const char* line, void* userData) {
   (void)userData;
 
+  startupSequencer.onUrc(line, millis());
+  if (strcmp(line, "+MATREADY") == 0 && !startupMatreadySeenLogged) {
+    startupMatreadySeenLogged = true;
+    logInfo("startup_at_status=matready_seen");
+  }
+
   if (smsReceiverOnUrc(line)) {
     return;
   }
@@ -280,21 +293,75 @@ static void submitStoredSmsReadIfReady() {
   }
 }
 
-static void submitStartupCommand(const char* command) {
-  if (!modemAtSubmit(command, kCommandTimeoutMs, printAtResult, const_cast<char*>(command))) {
+static void handleStartupCommandResult(ModemAtResult result, const char* response, void* userData) {
+  printAtResult(result, response, userData);
+  startupSequencer.complete(result, millis());
+}
+
+static void pollStartupSequencer(uint32_t now) {
+  if (startupSequencer.isComplete()) {
+    if (!startupSequencerWasComplete) {
+      startupSequencerWasComplete = true;
+      cellularStatusSetStartupComplete(true);
+      pdpGuard.setStartupComplete(true, now);
+      logInfo("startup_at_status=complete");
+    }
+    return;
+  }
+
+  const char* command = startupSequencer.commandToSubmit(now);
+  if (command == nullptr) {
+    return;
+  }
+
+  const uint32_t timeoutMs = StartupSequencerCore::timeoutForCommand(command);
+  if (!modemAtSubmit(command, timeoutMs, handleStartupCommandResult, const_cast<char*>(command))) {
     char message[96];
     snprintf(message, sizeof(message), "at_command=%s result=QUEUE_FULL", command);
     logWarn(message);
     Serial.print("at_command=");
     Serial.print(command);
     Serial.println(" result=QUEUE_FULL");
+    startupSequencer.deferSubmission(now);
+    return;
+  }
+
+  startupSequencer.markSubmitted(now);
+}
+
+static void handlePdpGuardResult(ModemAtResult result, const char* response, void* userData) {
+  const char* command = static_cast<const char*>(userData);
+  printAtResult(result, response, userData);
+  pdpGuard.complete(result, response, millis());
+
+  if (result != ModemAtResult::Ok) {
+    logWarn("pdp_guard_status=command_failed");
+  } else if (pdpGuard.isDeactivated()) {
+    if (pdpGuard.hasOnlyIgnoredContextsActive()) {
+      logInfo("pdp_guard_status=only_ims_active");
+    } else {
+      logInfo("pdp_guard_status=already_inactive");
+    }
+  } else if (command != nullptr && strncmp(command, "AT+CGACT=0,", strlen("AT+CGACT=0,")) == 0) {
+    logInfo("pdp_guard_status=deactivated");
+  } else {
+    logInfo("pdp_guard_status=checked");
   }
 }
 
-static void submitStartupCommands() {
-  for (size_t i = 0; i < StartupCommands::count(); ++i) {
-    submitStartupCommand(StartupCommands::at(i));
+static void pollPdpGuard(uint32_t now) {
+  const char* command = pdpGuard.commandToSubmit(now);
+  if (command == nullptr) {
+    return;
   }
+
+  if (!modemAtSubmit(command, PdpGuardCore::kCommandTimeoutMs, handlePdpGuardResult, const_cast<char*>(command))) {
+    logWarn("pdp_guard_status=queue_full");
+    pdpGuard.deferSubmission(now);
+    return;
+  }
+
+  pdpGuard.markSubmitted();
 }
 
 void setup() {
@@ -329,7 +396,11 @@ void setup() {
   smsReceiverSetErrorCallback(printSmsError, nullptr);
   smsReceiverSetStorageCallback(handleSmsStorageNotification, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
-  submitStartupCommands();
+  startupSequencer.begin(millis());
+  pdpGuard.begin();
+  startupSequencerWasComplete = false;
+  startupMatreadySeenLogged = false;
+  cellularStatusSetStartupComplete(false);
 }
 
 void loop() {
@@ -337,12 +408,14 @@ void loop() {
   smsReceiverPoll(millis());
   submitStoredSmsDeleteIfReady();
   submitStoredSmsReadIfReady();
-  cellularStatusPoll(millis());
+  const uint32_t now = millis();
+  pollStartupSequencer(now);
+  pollPdpGuard(now);
+  cellularStatusPoll(now);
   wifiManagerPoll(millis());
   webServerPoll();
   forwarderHttpPoll(millis());
 
-  const uint32_t now = millis();
   if (now - lastLogMs >= kHeartbeatLogIntervalMs) {
     lastLogMs = now;
 

@@ -33,6 +33,12 @@ void test_build_delete_stored_sms_command() {
   TEST_ASSERT_EQUAL_STRING("AT+CMGD=43", command);
 }
 
+void test_build_deactivate_pdp_context_command() {
+  char command[24];
+  TEST_ASSERT_TRUE(ModemCommands::buildDeactivatePdpContext(8, command, sizeof(command)));
+  TEST_ASSERT_EQUAL_STRING("AT+CGACT=0,8", command);
+}
+
 void test_build_command_rejects_too_small_buffer_without_partial_output() {
   char command[8];
   memset(command, 'x', sizeof(command));
@@ -53,6 +59,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_static_commands_have_business_names);
   RUN_TEST(test_build_read_stored_sms_command);
   RUN_TEST(test_build_delete_stored_sms_command);
+  RUN_TEST(test_build_deactivate_pdp_context_command);
   RUN_TEST(test_build_command_rejects_too_small_buffer_without_partial_output);
   RUN_TEST(test_build_command_rejects_null_output);
   return UNITY_END();

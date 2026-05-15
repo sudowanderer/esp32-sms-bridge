@@ -6,7 +6,6 @@ namespace {
 
 const char* const kStartupCommands[] = {
     ModemCommands::attention(),
-    ModemCommands::deactivatePdpContext(),
     ModemCommands::smsPduMode(),
     ModemCommands::smsDirectUrcMode(),
     ModemCommands::queryRegistration(),
