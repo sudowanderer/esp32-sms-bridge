@@ -7,6 +7,7 @@
 #include "modem_at.h"
 #include "modem_commands.h"
 #include "pdp_guard_core.h"
+#include "serial_at_console.h"
 #include "sms_queue.h"
 #include "sms_receiver.h"
 #include "sms_storage_reader_core.h"
@@ -16,7 +17,7 @@
 
 #include <string.h>
 
-static constexpr uint32_t kHeartbeatLogIntervalMs = 5000;
+static constexpr uint32_t kHeartbeatLogIntervalMs = 10000;
 static constexpr uint32_t kCommandTimeoutMs = 3000;
 
 static uint32_t lastLogMs = 0;
@@ -398,6 +399,7 @@ void setup() {
   smsReceiverSetErrorCallback(printSmsError, nullptr);
   smsReceiverSetStorageCallback(handleSmsStorageNotification, nullptr);
   modemAtSetUrcCallback(handleModemUrc, nullptr);
+  serialAtConsoleBegin();
   startupSequencer.begin(millis());
   pdpGuard.begin();
   startupSequencerWasComplete = false;
@@ -407,6 +409,7 @@ void setup() {
 
 void loop() {
   modemAtPoll();
+  serialAtConsolePoll(millis());
   smsReceiverPoll(millis());
   submitStoredSmsDeleteIfReady();
   submitStoredSmsReadIfReady();

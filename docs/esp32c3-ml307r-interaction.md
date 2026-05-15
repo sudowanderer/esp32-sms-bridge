@@ -444,6 +444,42 @@ bool sendSMS(const char* phoneNumber, const char* message)
 - 等待 `>`、写入 PDU、等待最终响应都交给 `modem_at` 统一调度。
 - Web 页面只提交发送请求，不直接阻塞等待完整发送流程。
 
+## USB Serial AT Console 和模组查询
+
+开发固件启用 USB Serial AT Console，用于人工调试 ML307R AT 命令。它只读取 ESP32
+USB `Serial` 的键盘输入，然后通过 `modemAtSubmit()` 把命令排进 `modem_at` 队列；它不直接读写
+`Serial1`，因此不会破坏 `modem_at` 对模块 UART 的独占。
+
+Console 会在 USB 串口打印 `at> ` 提示符，并由固件回显键盘输入；`pio device monitor`
+本身不做本地回显，所以实时看到输入内容依赖这个固件侧 echo。
+
+使用方式：
+
+```text
+help
+at AT
+at AT+MIPCALL?
+at AT+CGDCONT?
+at AT+CEREG?
+```
+
+返回格式：
+
+```text
+manual_at command=AT+MIPCALL? result=OK
+manual_at_response_begin
++MIPCALL: 1,0
+manual_at_response_end
+```
+
+安全限制：
+
+- 一次只允许一个人工 AT 命令等待响应；未完成时继续输入会返回 `manual_at result=BUSY`。
+- 队列满时返回 `manual_at ... result=QUEUE_FULL`，不会阻塞重试。
+- 调试入口拦截 `AT+CMGD`、`AT+CFUN=`、`AT+CGACT=`、`AT+MIPCALL=1`、`AT+MIPCALL=0`
+  等高风险命令，避免误删短信、改功能模式或手动改数据连接状态。
+- 不支持 `AT+CMGS` 这类需要 `>` prompt 和二阶段输入的交互式命令。
+
 ## Web 调试和模组查询
 
 当前 Web 工具箱支持发送任意 AT 指令：
