@@ -249,6 +249,11 @@ void test_status_page_contains_openwrt_style_dashboard_hooks() {
   TEST_ASSERT_NULL(strstr(output, "4G Modem"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Manufacturer"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Signal RSRP"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "signal_icon"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "signal-bar"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "signal-'+q"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "signal-excellent"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "signal-unknown"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Last updated"));
   TEST_ASSERT_NOT_NULL(strstr(output, "/api/status"));
 }
