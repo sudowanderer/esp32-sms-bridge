@@ -118,7 +118,7 @@ void test_parse_operator_pdp_and_apn_responses() {
 
   TEST_ASSERT_TRUE(CellularStatusCore::parseCopsResponse("+COPS: 0,2,\"00101\",7\r\nOK\r\n", status, 8000));
   TEST_ASSERT_TRUE(CellularStatusCore::parseCgdccontResponse("+CGDCONT: 1,\"IP\",\"EXAMPLE.APN\",\"0.0.0.0\",0,0\r\nOK\r\n", status, 8200));
-  TEST_ASSERT_TRUE(CellularStatusCore::parseCgactResponse("+CGACT: 1,1\r\nOK\r\n", status, 8300));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseMipCallResponse("+MIPCALL: 1,1,\"10.64.10.190\"\r\nOK\r\n", status, 8300));
 
   TEST_ASSERT_EQUAL_STRING("00101", status.operatorName);
   TEST_ASSERT_TRUE(status.dataConnectionKnown);
@@ -127,7 +127,7 @@ void test_parse_operator_pdp_and_apn_responses() {
   TEST_ASSERT_EQUAL_UINT32(8300, status.lastUpdatedMs);
 }
 
-void test_parse_pdp_ignores_ims_when_traffic_context_is_inactive() {
+void test_parse_mipcall_reports_inactive_even_when_ims_pdp_is_active() {
   CellularStatusSnapshot status = {};
 
   TEST_ASSERT_TRUE(CellularStatusCore::parseCgdccontResponse(
@@ -140,6 +140,7 @@ void test_parse_pdp_ignores_ims_when_traffic_context_is_inactive() {
       "+CGACT: 8,1\r\n"
       "OK\r\n",
       status, 8500));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseMipCallResponse("+MIPCALL: 1,0\r\nOK\r\n", status, 8520));
 
   TEST_ASSERT_TRUE(status.dataConnectionKnown);
   TEST_ASSERT_FALSE(status.dataConnectionActive);
@@ -147,7 +148,7 @@ void test_parse_pdp_ignores_ims_when_traffic_context_is_inactive() {
   TEST_ASSERT_EQUAL_UINT8(2, status.pdpContextCount);
 }
 
-void test_parse_pdp_reports_active_when_traffic_context_is_active() {
+void test_parse_mipcall_reports_active_data_connection() {
   CellularStatusSnapshot status = {};
 
   TEST_ASSERT_TRUE(CellularStatusCore::parseCgdccontResponse(
@@ -160,13 +161,30 @@ void test_parse_pdp_reports_active_when_traffic_context_is_active() {
       "+CGACT: 8,1\r\n"
       "OK\r\n",
       status, 8700));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseMipCallResponse("+MIPCALL: 1,1,\"10.64.10.190\"\r\nOK\r\n", status, 8720));
 
   TEST_ASSERT_TRUE(status.dataConnectionKnown);
   TEST_ASSERT_TRUE(status.dataConnectionActive);
   TEST_ASSERT_EQUAL_STRING("3gnet", status.apn);
 }
 
-void test_parse_pdp_context_refresh_clears_stale_activation_state() {
+void test_parse_mipcall_empty_ok_reports_inactive_data_connection() {
+  CellularStatusSnapshot status = {};
+
+  TEST_ASSERT_TRUE(CellularStatusCore::parseCgdccontResponse(
+      "+CGDCONT: 1,\"IPV4V6\",\"3gnet\",,0,0,,,,\r\n"
+      "+CGDCONT: 8,\"IPV4V6\",\"IMS\",,0,0,0,2,1,1\r\n"
+      "OK\r\n",
+      status, 8720));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseMipCallResponse("AT+MIPCALL?\r\nOK\r\n", status, 8730));
+
+  TEST_ASSERT_TRUE(status.dataConnectionKnown);
+  TEST_ASSERT_FALSE(status.dataConnectionActive);
+  TEST_ASSERT_EQUAL_STRING("3gnet", status.apn);
+  TEST_ASSERT_EQUAL_UINT32(8730, status.lastUpdatedMs);
+}
+
+void test_parse_pdp_context_refresh_keeps_mipcall_data_connection_state() {
   CellularStatusSnapshot status = {};
 
   TEST_ASSERT_TRUE(CellularStatusCore::parseCgdccontResponse(
@@ -179,6 +197,7 @@ void test_parse_pdp_context_refresh_clears_stale_activation_state() {
       "+CGACT: 8,1\r\n"
       "OK\r\n",
       status, 8740));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseMipCallResponse("+MIPCALL: 1,1,\"10.64.10.190\"\r\nOK\r\n", status, 8750));
 
   TEST_ASSERT_TRUE(status.dataConnectionKnown);
   TEST_ASSERT_TRUE(status.dataConnectionActive);
@@ -189,12 +208,12 @@ void test_parse_pdp_context_refresh_clears_stale_activation_state() {
       "OK\r\n",
       status, 8760));
 
-  TEST_ASSERT_FALSE(status.dataConnectionKnown);
-  TEST_ASSERT_FALSE(status.dataConnectionActive);
+  TEST_ASSERT_TRUE(status.dataConnectionKnown);
+  TEST_ASSERT_TRUE(status.dataConnectionActive);
   TEST_ASSERT_EQUAL_STRING("3gnet", status.apn);
 }
 
-void test_parse_pdp_treats_only_ims_active_as_inactive_data_connection() {
+void test_parse_cgact_does_not_drive_web_data_connection_state() {
   CellularStatusSnapshot status = {};
 
   TEST_ASSERT_TRUE(CellularStatusCore::parseCgdccontResponse(
@@ -206,7 +225,7 @@ void test_parse_pdp_treats_only_ims_active_as_inactive_data_connection() {
       "OK\r\n",
       status, 8900));
 
-  TEST_ASSERT_TRUE(status.dataConnectionKnown);
+  TEST_ASSERT_FALSE(status.dataConnectionKnown);
   TEST_ASSERT_FALSE(status.dataConnectionActive);
   TEST_ASSERT_EQUAL_STRING("", status.apn);
 }
@@ -227,9 +246,10 @@ int main(int argc, char** argv) {
   RUN_TEST(test_parse_sim_identity_responses);
   RUN_TEST(test_parse_cnum_response_uses_fallback_when_number_missing);
   RUN_TEST(test_parse_operator_pdp_and_apn_responses);
-  RUN_TEST(test_parse_pdp_ignores_ims_when_traffic_context_is_inactive);
-  RUN_TEST(test_parse_pdp_reports_active_when_traffic_context_is_active);
-  RUN_TEST(test_parse_pdp_context_refresh_clears_stale_activation_state);
-  RUN_TEST(test_parse_pdp_treats_only_ims_active_as_inactive_data_connection);
+  RUN_TEST(test_parse_mipcall_reports_inactive_even_when_ims_pdp_is_active);
+  RUN_TEST(test_parse_mipcall_reports_active_data_connection);
+  RUN_TEST(test_parse_mipcall_empty_ok_reports_inactive_data_connection);
+  RUN_TEST(test_parse_pdp_context_refresh_keeps_mipcall_data_connection_state);
+  RUN_TEST(test_parse_cgact_does_not_drive_web_data_connection_state);
   return UNITY_END();
 }

@@ -41,6 +41,8 @@ struct CellularStatusSnapshot {
   char operatorName[32];
   bool dataConnectionKnown;
   bool dataConnectionActive;
+  bool mipCallKnown;
+  bool mipCallActive;
   char apn[64];
   PdpContext pdpContexts[kMaxPdpContexts];
   uint8_t pdpContextCount;
@@ -59,6 +61,7 @@ class CellularStatusCore {
   static bool parseCopsResponse(const char* response, CellularStatusSnapshot& status, uint32_t nowMs);
   static bool parseCgactResponse(const char* response, CellularStatusSnapshot& status, uint32_t nowMs);
   static bool parseCgdccontResponse(const char* response, CellularStatusSnapshot& status, uint32_t nowMs);
+  static bool parseMipCallResponse(const char* response, CellularStatusSnapshot& status, uint32_t nowMs);
   static const char* registrationStatusName(uint8_t status);
   static const char* rsrpQualityName(int16_t rsrpDbm, bool known);
   static int16_t csqToRssiDbm(uint8_t rssi);

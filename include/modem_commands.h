@@ -17,11 +17,11 @@ const char* queryIccid();
 const char* queryOwnNumber();
 const char* queryOperator();
 const char* queryPdpActivation();
-const char* deactivatePdpContext();
 const char* queryPdpContext();
+const char* queryMipCall();
+const char* disconnectMipCall();
 
 bool buildReadStoredSms(uint16_t index, char* output, size_t outputSize);
 bool buildDeleteStoredSms(uint16_t index, char* output, size_t outputSize);
-bool buildDeactivatePdpContext(uint8_t cid, char* output, size_t outputSize);
 
 }  // namespace ModemCommands

@@ -17,8 +17,9 @@ void test_static_commands_have_business_names() {
   TEST_ASSERT_EQUAL_STRING("AT+CNUM", ModemCommands::queryOwnNumber());
   TEST_ASSERT_EQUAL_STRING("AT+COPS?", ModemCommands::queryOperator());
   TEST_ASSERT_EQUAL_STRING("AT+CGACT?", ModemCommands::queryPdpActivation());
-  TEST_ASSERT_EQUAL_STRING("AT+CGACT=0,1", ModemCommands::deactivatePdpContext());
   TEST_ASSERT_EQUAL_STRING("AT+CGDCONT?", ModemCommands::queryPdpContext());
+  TEST_ASSERT_EQUAL_STRING("AT+MIPCALL?", ModemCommands::queryMipCall());
+  TEST_ASSERT_EQUAL_STRING("AT+MIPCALL=0,1", ModemCommands::disconnectMipCall());
 }
 
 void test_build_read_stored_sms_command() {
@@ -31,12 +32,6 @@ void test_build_delete_stored_sms_command() {
   char command[24];
   TEST_ASSERT_TRUE(ModemCommands::buildDeleteStoredSms(43, command, sizeof(command)));
   TEST_ASSERT_EQUAL_STRING("AT+CMGD=43", command);
-}
-
-void test_build_deactivate_pdp_context_command() {
-  char command[24];
-  TEST_ASSERT_TRUE(ModemCommands::buildDeactivatePdpContext(8, command, sizeof(command)));
-  TEST_ASSERT_EQUAL_STRING("AT+CGACT=0,8", command);
 }
 
 void test_build_command_rejects_too_small_buffer_without_partial_output() {
@@ -59,7 +54,6 @@ int main(int argc, char** argv) {
   RUN_TEST(test_static_commands_have_business_names);
   RUN_TEST(test_build_read_stored_sms_command);
   RUN_TEST(test_build_delete_stored_sms_command);
-  RUN_TEST(test_build_deactivate_pdp_context_command);
   RUN_TEST(test_build_command_rejects_too_small_buffer_without_partial_output);
   RUN_TEST(test_build_command_rejects_null_output);
   return UNITY_END();

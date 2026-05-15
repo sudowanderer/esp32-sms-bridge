@@ -116,6 +116,24 @@ static bool copyDigitsLine(const char* response, char* output, size_t outputSize
   return false;
 }
 
+static bool hasOkLine(const char* response) {
+  const char* cursor = response;
+  while (cursor != nullptr && *cursor != '\0') {
+    while (*cursor == '\r' || *cursor == '\n') {
+      ++cursor;
+    }
+    char value[16];
+    copyTrimmedLine(cursor, value, sizeof(value));
+    if (strcmp(value, "OK") == 0) {
+      return true;
+    }
+    while (*cursor != '\0' && *cursor != '\n') {
+      ++cursor;
+    }
+  }
+  return false;
+}
+
 static bool extractQuotedField(const char* line, uint8_t fieldIndex, char* output, size_t outputSize) {
   if (line == nullptr || output == nullptr || outputSize == 0) {
     return false;
@@ -198,13 +216,6 @@ static CellularStatusSnapshot::PdpContext* findOrAddPdpContext(CellularStatusSna
 
 static void updateDataConnectionSummary(CellularStatusSnapshot& status) {
   status.apn[0] = '\0';
-  status.dataConnectionKnown = false;
-  status.dataConnectionActive = false;
-
-  bool hasKnownTrafficContext = false;
-  bool hasTrafficActivationState = false;
-  bool hasIgnoredActivationState = false;
-  bool trafficActive = false;
 
   for (uint8_t i = 0; i < status.pdpContextCount; ++i) {
     const CellularStatusSnapshot::PdpContext& context = status.pdpContexts[i];
@@ -213,31 +224,16 @@ static void updateDataConnectionSummary(CellularStatusSnapshot& status) {
     }
 
     if (context.ignored) {
-      if (context.activationKnown) {
-        hasIgnoredActivationState = true;
-      }
       continue;
     }
 
-    hasKnownTrafficContext = true;
     if (status.apn[0] == '\0') {
       snprintf(status.apn, sizeof(status.apn), "%s", context.apn);
     }
-    if (context.activationKnown) {
-      hasTrafficActivationState = true;
-      if (context.active) {
-        trafficActive = true;
-      }
-    }
   }
 
-  if (hasTrafficActivationState) {
-    status.dataConnectionKnown = true;
-    status.dataConnectionActive = trafficActive;
-  } else if (!hasKnownTrafficContext && hasIgnoredActivationState) {
-    status.dataConnectionKnown = true;
-    status.dataConnectionActive = false;
-  }
+  status.dataConnectionKnown = status.mipCallKnown;
+  status.dataConnectionActive = status.mipCallKnown && status.mipCallActive;
 }
 
 static void copyIccidValue(const char* line, char* output, size_t outputSize) {
@@ -470,9 +466,6 @@ bool CellularStatusCore::parseCgdccontResponse(const char* response, CellularSta
   bool found = false;
 
   status.pdpContextCount = 0;
-  status.apn[0] = '\0';
-  status.dataConnectionKnown = false;
-  status.dataConnectionActive = false;
 
   while ((cursor = findLine(cursor, "+CGDCONT:")) != nullptr) {
     unsigned int cid = 0;
@@ -494,6 +487,32 @@ bool CellularStatusCore::parseCgdccontResponse(const char* response, CellularSta
   if (!found) {
     return false;
   }
+  updateDataConnectionSummary(status);
+  status.lastUpdatedMs = nowMs;
+  return true;
+}
+
+bool CellularStatusCore::parseMipCallResponse(const char* response, CellularStatusSnapshot& status, uint32_t nowMs) {
+  const char* line = findLine(response, "+MIPCALL:");
+  if (line == nullptr) {
+    if (!hasOkLine(response)) {
+      return false;
+    }
+    status.mipCallKnown = true;
+    status.mipCallActive = false;
+    updateDataConnectionSummary(status);
+    status.lastUpdatedMs = nowMs;
+    return true;
+  }
+
+  unsigned int cid = 0;
+  unsigned int state = 0;
+  if (sscanf(line, "+MIPCALL: %u,%u", &cid, &state) != 2) {
+    return false;
+  }
+
+  status.mipCallKnown = true;
+  status.mipCallActive = state == 1;
   updateDataConnectionSummary(status);
   status.lastUpdatedMs = nowMs;
   return true;

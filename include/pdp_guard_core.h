@@ -9,8 +9,6 @@ class PdpGuardCore {
  public:
   static constexpr uint32_t kCommandTimeoutMs = 10000;
   static constexpr uint32_t kRetryIntervalMs = 60000;
-  static constexpr uint8_t kMaxContexts = 8;
-  static constexpr size_t kCommandCapacity = 32;
 
   void begin();
   void setStartupComplete(bool complete, uint32_t nowMs);
@@ -21,39 +19,22 @@ class PdpGuardCore {
 
   bool isPending() const;
   bool isDeactivated() const;
-  bool hasOnlyIgnoredContextsActive() const;
-  uint8_t lastTargetCid() const;
+  bool isAlreadyDisconnected() const;
 
  private:
   enum class State : uint8_t {
-    QueryContexts,
-    QueryActivation,
-    Deactivate,
+    QueryConnection,
+    Disconnect,
     Complete,
   };
 
-  struct Context {
-    uint8_t cid = 0;
-    bool known = false;
-    bool active = false;
-    bool ignored = false;
-  };
-
   void scheduleRetry(uint32_t nowMs);
-  void resetContexts();
-  bool parseContexts(const char* response);
-  bool parseActivation(const char* response);
-  int findTargetIndex();
-  Context* findOrAddContext(uint8_t cid);
+  bool parseConnectionActive(const char* response, bool& active) const;
 
   bool startupComplete_ = false;
   bool pending_ = false;
   bool deactivated_ = false;
-  bool onlyIgnoredContextsActive_ = false;
+  bool alreadyDisconnected_ = false;
   uint32_t nextAttemptMs_ = 0;
-  State state_ = State::QueryContexts;
-  Context contexts_[kMaxContexts];
-  uint8_t contextCount_ = 0;
-  uint8_t targetCid_ = 0;
-  char command_[kCommandCapacity];
+  State state_ = State::QueryConnection;
 };

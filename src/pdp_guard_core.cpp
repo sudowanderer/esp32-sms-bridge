@@ -28,72 +28,15 @@ const char* findLine(const char* text, const char* prefix) {
   return nullptr;
 }
 
-bool extractApn(const char* line, char* output, size_t outputSize) {
-  if (line == nullptr || output == nullptr || outputSize == 0) {
-    return false;
-  }
-
-  output[0] = '\0';
-  const char* cursor = line;
-  for (uint8_t quote = 0; quote < 3; ++quote) {
-    cursor = strchr(cursor, '"');
-    if (cursor == nullptr) {
-      return false;
-    }
-    ++cursor;
-  }
-
-  const char* end = strchr(cursor, '"');
-  if (end == nullptr) {
-    return false;
-  }
-
-  const size_t len = static_cast<size_t>(end - cursor);
-  if (len >= outputSize) {
-    return false;
-  }
-
-  memcpy(output, cursor, len);
-  output[len] = '\0';
-  return true;
-}
-
-bool equalsIgnoreCase(const char* a, const char* b) {
-  if (a == nullptr || b == nullptr) {
-    return false;
-  }
-
-  while (*a != '\0' && *b != '\0') {
-    char ca = *a;
-    char cb = *b;
-    if (ca >= 'a' && ca <= 'z') {
-      ca = static_cast<char>(ca - 'a' + 'A');
-    }
-    if (cb >= 'a' && cb <= 'z') {
-      cb = static_cast<char>(cb - 'a' + 'A');
-    }
-    if (ca != cb) {
-      return false;
-    }
-    ++a;
-    ++b;
-  }
-
-  return *a == '\0' && *b == '\0';
-}
-
 }  // namespace
 
 void PdpGuardCore::begin() {
   startupComplete_ = false;
   pending_ = false;
   deactivated_ = false;
-  onlyIgnoredContextsActive_ = false;
+  alreadyDisconnected_ = false;
   nextAttemptMs_ = 0;
-  state_ = State::QueryContexts;
-  resetContexts();
-  targetCid_ = 0;
-  command_[0] = '\0';
+  state_ = State::QueryConnection;
 }
 
 void PdpGuardCore::setStartupComplete(bool complete, uint32_t nowMs) {
@@ -103,13 +46,13 @@ void PdpGuardCore::setStartupComplete(bool complete, uint32_t nowMs) {
 
   startupComplete_ = complete;
   if (complete && !deactivated_) {
-    state_ = State::QueryContexts;
+    state_ = State::QueryConnection;
     nextAttemptMs_ = nowMs;
   }
 }
 
 const char* PdpGuardCore::commandToSubmit(uint32_t nowMs) {
-  if (!startupComplete_ || pending_ || deactivated_ || onlyIgnoredContextsActive_) {
+  if (!startupComplete_ || pending_ || deactivated_) {
     return nullptr;
   }
 
@@ -118,15 +61,10 @@ const char* PdpGuardCore::commandToSubmit(uint32_t nowMs) {
   }
 
   switch (state_) {
-    case State::QueryContexts:
-      return ModemCommands::queryPdpContext();
-    case State::QueryActivation:
-      return ModemCommands::queryPdpActivation();
-    case State::Deactivate:
-      if (!ModemCommands::buildDeactivatePdpContext(targetCid_, command_, sizeof(command_))) {
-        return nullptr;
-      }
-      return command_;
+    case State::QueryConnection:
+      return ModemCommands::queryMipCall();
+    case State::Disconnect:
+      return ModemCommands::disconnectMipCall();
     case State::Complete:
       return nullptr;
   }
@@ -149,39 +87,28 @@ void PdpGuardCore::complete(ModemAtResult result, const char* response, uint32_t
     return;
   }
 
-  if (state_ == State::QueryContexts) {
-    if (!parseContexts(response)) {
-      scheduleRetry(nowMs);
-      return;
-    }
-    state_ = State::QueryActivation;
-    nextAttemptMs_ = nowMs;
-    return;
-  }
-
-  if (state_ == State::QueryActivation) {
-    if (!parseActivation(response)) {
+  if (state_ == State::QueryConnection) {
+    bool active = false;
+    if (!parseConnectionActive(response, active)) {
       scheduleRetry(nowMs);
       return;
     }
 
-    const int target = findTargetIndex();
-    if (target < 0) {
+    if (!active) {
+      alreadyDisconnected_ = true;
       deactivated_ = true;
       state_ = State::Complete;
       return;
     }
 
-    targetCid_ = contexts_[target].cid;
-    state_ = State::Deactivate;
+    state_ = State::Disconnect;
     nextAttemptMs_ = nowMs;
     return;
   }
 
-  if (state_ == State::Deactivate) {
-    state_ = State::QueryContexts;
-    resetContexts();
-    nextAttemptMs_ = nowMs;
+  if (state_ == State::Disconnect) {
+    deactivated_ = true;
+    state_ = State::Complete;
   }
 }
 
@@ -199,118 +126,28 @@ bool PdpGuardCore::isDeactivated() const {
   return deactivated_;
 }
 
-bool PdpGuardCore::hasOnlyIgnoredContextsActive() const {
-  return onlyIgnoredContextsActive_;
-}
-
-uint8_t PdpGuardCore::lastTargetCid() const {
-  return targetCid_;
+bool PdpGuardCore::isAlreadyDisconnected() const {
+  return alreadyDisconnected_;
 }
 
 void PdpGuardCore::scheduleRetry(uint32_t nowMs) {
-  state_ = State::QueryContexts;
+  state_ = State::QueryConnection;
   pending_ = false;
   nextAttemptMs_ = nowMs + kRetryIntervalMs;
-  resetContexts();
 }
 
-void PdpGuardCore::resetContexts() {
-  memset(contexts_, 0, sizeof(contexts_));
-  contextCount_ = 0;
-  targetCid_ = 0;
-}
-
-bool PdpGuardCore::parseContexts(const char* response) {
-  resetContexts();
-  const char* cursor = response;
-  bool found = false;
-  while ((cursor = findLine(cursor, "+CGDCONT:")) != nullptr) {
-    unsigned int cid = 0;
-    if (sscanf(cursor, "+CGDCONT: %u,", &cid) == 1 && cid <= 255) {
-      char apn[32];
-      if (!extractApn(cursor, apn, sizeof(apn))) {
-        return false;
-      }
-      Context* context = findOrAddContext(static_cast<uint8_t>(cid));
-      if (context == nullptr) {
-        return false;
-      }
-      context->known = true;
-      context->ignored = equalsIgnoreCase(apn, "IMS");
-      found = true;
-    }
-
-    while (*cursor != '\0' && *cursor != '\n') {
-      ++cursor;
-    }
-  }
-  return found;
-}
-
-bool PdpGuardCore::parseActivation(const char* response) {
-  for (uint8_t i = 0; i < contextCount_; ++i) {
-    contexts_[i].active = false;
+bool PdpGuardCore::parseConnectionActive(const char* response, bool& active) const {
+  const char* line = findLine(response, "+MIPCALL:");
+  if (line == nullptr) {
+    return false;
   }
 
-  const char* cursor = response;
-  bool found = false;
-  while ((cursor = findLine(cursor, "+CGACT:")) != nullptr) {
-    unsigned int cid = 0;
-    unsigned int state = 0;
-    if (sscanf(cursor, "+CGACT: %u,%u", &cid, &state) == 2 && cid <= 255) {
-      for (uint8_t i = 0; i < contextCount_; ++i) {
-        if (contexts_[i].cid == static_cast<uint8_t>(cid)) {
-          contexts_[i].active = state == 1;
-          break;
-        }
-      }
-      found = true;
-    }
-
-    while (*cursor != '\0' && *cursor != '\n') {
-      ++cursor;
-    }
-  }
-  return found;
-}
-
-int PdpGuardCore::findTargetIndex() {
-  bool anyActive = false;
-  bool anyTarget = false;
-  int target = -1;
-
-  for (uint8_t i = 0; i < contextCount_; ++i) {
-    if (!contexts_[i].active) {
-      continue;
-    }
-
-    anyActive = true;
-    if (!contexts_[i].ignored) {
-      anyTarget = true;
-      target = i;
-      break;
-    }
+  unsigned int cid = 0;
+  unsigned int state = 0;
+  if (sscanf(line, "+MIPCALL: %u,%u", &cid, &state) != 2) {
+    return false;
   }
 
-  onlyIgnoredContextsActive_ = anyActive && !anyTarget;
-  return target;
-}
-
-PdpGuardCore::Context* PdpGuardCore::findOrAddContext(uint8_t cid) {
-  for (uint8_t i = 0; i < contextCount_; ++i) {
-    if (contexts_[i].cid == cid) {
-      return &contexts_[i];
-    }
-  }
-
-  if (contextCount_ >= kMaxContexts) {
-    return nullptr;
-  }
-
-  Context* context = &contexts_[contextCount_++];
-  context->cid = cid;
-  context->known = false;
-  context->active = false;
-  context->ignored = false;
-  return context;
+  active = state == 1;
+  return true;
 }

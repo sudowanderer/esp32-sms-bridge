@@ -24,6 +24,7 @@ enum class QueryStep : uint8_t {
   Operator,
   PdpActivation,
   PdpContext,
+  MipCall,
 };
 
 static constexpr QueryStep kStaticSteps[] = {
@@ -39,6 +40,7 @@ static constexpr QueryStep kDynamicSteps[] = {
     QueryStep::Operator,
     QueryStep::PdpContext,
     QueryStep::PdpActivation,
+    QueryStep::MipCall,
 };
 
 static CellularStatusSnapshot snapshot = {};
@@ -73,6 +75,8 @@ static const char* commandForStep(QueryStep step) {
       return ModemCommands::queryPdpActivation();
     case QueryStep::PdpContext:
       return ModemCommands::queryPdpContext();
+    case QueryStep::MipCall:
+      return ModemCommands::queryMipCall();
   }
   return ModemCommands::queryExtendedSignal();
 }
@@ -97,6 +101,8 @@ static const char* stepName(QueryStep step) {
       return "cgact";
     case QueryStep::PdpContext:
       return "cgdcont";
+    case QueryStep::MipCall:
+      return "mipcall";
   }
   return "unknown";
 }
@@ -121,6 +127,8 @@ static bool parseStep(QueryStep step, const char* response, uint32_t now) {
       return CellularStatusCore::parseCgactResponse(response, snapshot, now);
     case QueryStep::PdpContext:
       return CellularStatusCore::parseCgdccontResponse(response, snapshot, now);
+    case QueryStep::MipCall:
+      return CellularStatusCore::parseMipCallResponse(response, snapshot, now);
   }
   return false;
 }
@@ -135,7 +143,7 @@ static void handleQueryResult(ModemAtResult result, const char* response, void* 
   if (ok) {
     snprintf(message, sizeof(message), "cellular_status step=%s ok", stepName(activeStep));
     logInfo(message);
-    if (!activeStaticStep && activeStep == QueryStep::PdpActivation) {
+    if (!activeStaticStep && activeStep == QueryStep::MipCall) {
       snprintf(message,
                sizeof(message),
                "cellular_status data_connection=%s apn=%s",
@@ -143,6 +151,8 @@ static void handleQueryResult(ModemAtResult result, const char* response, void* 
                snapshot.apn[0] != '\0' ? snapshot.apn : "unknown");
       logInfo(message);
     }
+  } else if (!activeStaticStep && activeStep == QueryStep::MipCall && snapshot.mipCallKnown && !snapshot.mipCallActive) {
+    logInfo("cellular_status step=mipcall inactive_unconfirmed");
   } else {
     snprintf(message, sizeof(message), "cellular_status step=%s failed", stepName(activeStep));
     logWarn(message);
@@ -188,6 +198,14 @@ void cellularStatusSetStartupComplete(bool complete) {
     nextPollMs = now;
     nextDynamicRoundMs = now;
   }
+}
+
+void cellularStatusSetDataConnection(bool known, bool active, uint32_t nowMs) {
+  snapshot.mipCallKnown = known;
+  snapshot.mipCallActive = known && active;
+  snapshot.dataConnectionKnown = known;
+  snapshot.dataConnectionActive = known && active;
+  snapshot.lastUpdatedMs = nowMs;
 }
 
 void cellularStatusPoll(uint32_t nowMs) {

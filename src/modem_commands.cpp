@@ -71,12 +71,16 @@ const char* queryPdpActivation() {
   return "AT+CGACT?";
 }
 
-const char* deactivatePdpContext() {
-  return "AT+CGACT=0,1";
-}
-
 const char* queryPdpContext() {
   return "AT+CGDCONT?";
+}
+
+const char* queryMipCall() {
+  return "AT+MIPCALL?";
+}
+
+const char* disconnectMipCall() {
+  return "AT+MIPCALL=0,1";
 }
 
 bool buildReadStoredSms(uint16_t index, char* output, size_t outputSize) {
@@ -85,10 +89,6 @@ bool buildReadStoredSms(uint16_t index, char* output, size_t outputSize) {
 
 bool buildDeleteStoredSms(uint16_t index, char* output, size_t outputSize) {
   return buildIndexedCommand("AT+CMGD=", index, output, outputSize);
-}
-
-bool buildDeactivatePdpContext(uint8_t cid, char* output, size_t outputSize) {
-  return buildIndexedCommand("AT+CGACT=0,", cid, output, outputSize);
 }
 
 }  // namespace ModemCommands

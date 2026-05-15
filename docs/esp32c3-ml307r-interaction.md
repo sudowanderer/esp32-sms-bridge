@@ -170,19 +170,17 @@ MODEM_EN HIGH -> AT 返回 OK
    - `1`：已注册本地网络
    - `5`：已注册漫游网络
 
-11. 启动主线完成后，后台 PDP guard 关闭普通数据 PDP 连接，避免默认消耗流量：
+11. 启动主线完成后，后台 data guard 按 ML307R 手册断开应用层数据连接，避免默认应用层连网消耗流量：
 
    ```text
-   AT+CGDCONT?
-   AT+CGACT?
-   AT+CGACT=0,1
+   AT+MIPCALL?
+   AT+MIPCALL=0,1
    ```
 
-   Guard 会先用 `AT+CGDCONT?` 建立 cid 到 APN 的映射，再用 `AT+CGACT?` 查询激活状态。只对 active
-   且 APN 不是 `IMS` 的 context 生成 `AT+CGACT=0,<cid>`；例如 `GIFFGAFF.COM` 会被视为普通数据 APN，
-   `IMS` 会被忽略，避免误关运营商 IMS context。若关闭返回 `ERROR`、`+CME ERROR` 或超时，固件会记录
-   `pdp_guard_status=command_failed` 并每 60 秒从查询开始重试一次。PDP guard 不阻塞 `AT+CMGF=0` /
-   `AT+CNMI=2,2,0,0,0` 短信初始化。
+   ML307R 手册说明自动拨号模式下不建议用 `AT+CGACT` 手动激活或去激活 PDP，因此固件不再发送
+   `AT+CGACT=0,<cid>`。Guard 只查询 `AT+MIPCALL?`；如果应用层连接已建立，则发送 `AT+MIPCALL=0,1`。
+   若返回 `ERROR`、`+CME ERROR` 或超时，固件会记录 `data_guard_status=command_failed` 并每 60 秒重试。
+   Data guard 不阻塞 `AT+CMGF=0` / `AT+CNMI=2,2,0,0,0` 短信初始化。
 
 
 重构注意：
@@ -467,16 +465,17 @@ String resp = sendATCommand(cmd.c_str(), 5000);
 | 本机号码 | `AT+CNUM` |
 | 网络注册状态 | `AT+CEREG?` |
 | 运营商 | `AT+COPS?` |
+| 应用层数据连接 | `AT+MIPCALL?` |
+| 断开应用层数据连接 | `AT+MIPCALL=0,1` |
 | PDP 激活状态 | `AT+CGACT?` |
 | APN / PDP 上下文 | `AT+CGDCONT?` |
 | 功能模式 / 飞行模式 | `AT+CFUN?` |
 | 设置全功能模式 | `AT+CFUN=1` |
 | 设置飞行模式 | `AT+CFUN=4` |
 
-首页 `Data connection` 不直接等同于 `AT+CGACT?` 中任意 cid 为 active。固件先用 `AT+CGDCONT?`
-建立 cid 到 APN 的映射，再用 `AT+CGACT?` 更新激活状态；APN 为 `IMS` 的 context 被视为运营商内部 IMS
-通道，不计入普通移动数据连接。因此 `cid=8, APN=IMS, active` 且 `cid=1, APN=3gnet, inactive`
-时，首页应显示 `Data connection: inactive`。
+首页 `Data connection` 表示 ML307R 应用层数据连接，优先由 `AT+MIPCALL?` 决定。`AT+CGACT?`
+只作为底层 PDP 诊断信息，不直接决定首页 Data connection。APN 为 `IMS` 的 context 是运营商内部 IMS
+通道，不应作为普通移动数据连接展示。
 
 当前问题：
 
@@ -498,10 +497,10 @@ String resp = sendATCommand(cmd.c_str(), 5000);
 
 1. 清空串口缓冲区。
 
-2. 激活 PDP 上下文：
+2. 建立应用层数据连接：
 
    ```text
-   AT+CGACT=1,1
+   AT+MIPCALL=1,1
    ```
 
 3. 等待网络稳定。
@@ -514,10 +513,10 @@ String resp = sendATCommand(cmd.c_str(), 5000);
 
 5. 等待 `+MPING:` URC 结果。
 
-6. 关闭 PDP 上下文：
+6. 断开应用层数据连接：
 
    ```text
-   AT+CGACT=0,1
+   AT+MIPCALL=0,1
    ```
 
 当前问题：

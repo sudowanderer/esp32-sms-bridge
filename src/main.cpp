@@ -332,20 +332,22 @@ static void pollStartupSequencer(uint32_t now) {
 static void handlePdpGuardResult(ModemAtResult result, const char* response, void* userData) {
   const char* command = static_cast<const char*>(userData);
   printAtResult(result, response, userData);
-  pdpGuard.complete(result, response, millis());
+  const uint32_t now = millis();
+  pdpGuard.complete(result, response, now);
 
   if (result != ModemAtResult::Ok) {
-    logWarn("pdp_guard_status=command_failed");
+    logWarn("data_guard_status=command_failed");
   } else if (pdpGuard.isDeactivated()) {
-    if (pdpGuard.hasOnlyIgnoredContextsActive()) {
-      logInfo("pdp_guard_status=only_ims_active");
+    if (pdpGuard.isAlreadyDisconnected()) {
+      logInfo("data_guard_status=already_disconnected");
     } else {
-      logInfo("pdp_guard_status=already_inactive");
+      if (command != nullptr && strcmp(command, ModemCommands::disconnectMipCall()) == 0) {
+        cellularStatusSetDataConnection(true, false, now);
+      }
+      logInfo("data_guard_status=disconnected");
     }
-  } else if (command != nullptr && strncmp(command, "AT+CGACT=0,", strlen("AT+CGACT=0,")) == 0) {
-    logInfo("pdp_guard_status=deactivated");
   } else {
-    logInfo("pdp_guard_status=checked");
+    logInfo("data_guard_status=checked");
   }
 }
 
@@ -356,7 +358,7 @@ static void pollPdpGuard(uint32_t now) {
   }
 
   if (!modemAtSubmit(command, PdpGuardCore::kCommandTimeoutMs, handlePdpGuardResult, const_cast<char*>(command))) {
-    logWarn("pdp_guard_status=queue_full");
+    logWarn("data_guard_status=queue_full");
     pdpGuard.deferSubmission(now);
     return;
   }
