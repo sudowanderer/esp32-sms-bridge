@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifndef APP_VERSION
+#define APP_VERSION "dev"
+#endif
+
 class JsonWriter {
  public:
   JsonWriter(char* output, size_t outputSize) : output_(output), outputSize_(outputSize) {
@@ -459,6 +463,7 @@ bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize) {
       "body{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f3f5f7;color:#1f2933}"
       "header{background:#102a43;color:#fff;padding:10px 16px;border-bottom:3px solid #2f80ed}"
       "header h1{font-size:18px;margin:0}"
+      "header .version{font-size:13px;font-weight:400;color:#bcccdc;margin-left:6px}"
       "nav{background:#243b53;padding:0 12px}"
       "nav a{display:inline-block;color:#d9e2ec;text-decoration:none;padding:9px 12px}"
       "nav a.active{background:#f3f5f7;color:#102a43}"
@@ -473,7 +478,8 @@ bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize) {
       "input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #bcccdc;border-radius:3px;background:#fff}"
       "button{margin-top:12px;padding:8px 14px;border:1px solid #1f6feb;background:#1f6feb;color:#fff;border-radius:3px}"
       ".hint{color:#697b8c;font-size:12px}"
-      "</style></head><body><header><h1>SMS Bridge</h1></header><nav>");
+      "</style></head><body>");
+  writer.appendFormat("<header><h1>SMS Bridge <span class=\"version\">v%s</span></h1></header><nav>", APP_VERSION);
   writer.appendFormat("<a href=\"/\"%s>Status</a>", activeClass(page, WebPageKind::Status));
   writer.appendFormat("<a href=\"/config\"%s>Config</a>", activeClass(page, WebPageKind::Config));
   writer.appendFormat("<a href=\"/queue\"%s>Queue</a>", activeClass(page, WebPageKind::Queue));

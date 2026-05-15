@@ -2,7 +2,12 @@
 
 #include "web_server_core.h"
 
+#include <stdio.h>
 #include <string.h>
+
+#ifndef APP_VERSION
+#define APP_VERSION "dev"
+#endif
 
 void test_json_escape_handles_quotes_backslashes_and_controls() {
   char output[96];
@@ -200,7 +205,11 @@ void test_status_page_contains_openwrt_style_dashboard_hooks() {
 
   TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Status, output, sizeof(output)));
 
+  char expectedVersion[32];
+  snprintf(expectedVersion, sizeof(expectedVersion), "v%s", APP_VERSION);
+
   TEST_ASSERT_NOT_NULL(strstr(output, "SMS Bridge"));
+  TEST_ASSERT_NOT_NULL(strstr(output, expectedVersion));
   TEST_ASSERT_NOT_NULL(strstr(output, "System"));
   TEST_ASSERT_NOT_NULL(strstr(output, "WiFi"));
   TEST_ASSERT_NOT_NULL(strstr(output, "4G Modem"));
