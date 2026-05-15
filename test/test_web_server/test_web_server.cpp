@@ -38,6 +38,22 @@ void test_status_json_contains_runtime_state() {
   status.cellularRegistrationKnown = true;
   status.cellularRegistrationStatus = 1;
   strncpy(status.cellularRegistrationText, "registered_home", sizeof(status.cellularRegistrationText) - 1);
+  status.cellularLteSignalKnown = true;
+  status.cellularRsrpDbm = -93;
+  status.cellularRsrqDbTenths = -25;
+  strncpy(status.cellularRsrpQuality, "fair", sizeof(status.cellularRsrpQuality) - 1);
+  strncpy(status.cellularCesqRaw, "42,99,255,255,34,47", sizeof(status.cellularCesqRaw) - 1);
+  strncpy(status.cellularManufacturer, "CMCC", sizeof(status.cellularManufacturer) - 1);
+  strncpy(status.cellularModel, "ML307A", sizeof(status.cellularModel) - 1);
+  strncpy(status.cellularFirmware, "ML307A-DSLN-MTSH1S00", sizeof(status.cellularFirmware) - 1);
+  strncpy(status.cellularImsi, "001010123456789", sizeof(status.cellularImsi) - 1);
+  strncpy(status.cellularIccid, "8901001234567890123F", sizeof(status.cellularIccid) - 1);
+  strncpy(status.cellularOwnNumber, "not stored or unsupported", sizeof(status.cellularOwnNumber) - 1);
+  strncpy(status.cellularOperatorName, "00101", sizeof(status.cellularOperatorName) - 1);
+  status.cellularDataConnectionKnown = true;
+  status.cellularDataConnectionActive = true;
+  strncpy(status.cellularApn, "EXAMPLE.APN", sizeof(status.cellularApn) - 1);
+  status.cellularLastUpdatedMs = 9000;
   status.smsQueueDepth = 3;
   status.smsQueuePending = 1;
   status.wifiConfigured = true;
@@ -50,13 +66,30 @@ void test_status_json_contains_runtime_state() {
   strncpy(status.forwarderLastError, "", sizeof(status.forwarderLastError) - 1);
   status.loggerCount = 7;
 
-  char output[768];
+  char output[1536];
   TEST_ASSERT_TRUE(webBuildStatusJson(status, output, sizeof(output)));
 
   TEST_ASSERT_NOT_NULL(strstr(output, "\"uptime_ms\":12345"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"free_heap\":210000"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"modem\":{\"busy\":true,\"queue_depth\":2}"));
-  TEST_ASSERT_NOT_NULL(strstr(output, "\"cellular\":{\"signal_known\":true,\"csq\":20,\"rssi_dbm\":-73,\"registration_known\":true,\"registration_status\":1,\"registration\":\"registered_home\"}"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"signal_known\":true"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"rssi_dbm\":-73"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"registration\":\"registered_home\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"rsrp_dbm\":-93"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"rsrq_db_tenths\":-25"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"rsrp_quality\":\"fair\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"cesq_raw\":\"42,99,255,255,34,47\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"manufacturer\":\"CMCC\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"model\":\"ML307A\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"firmware\":\"ML307A-DSLN-MTSH1S00\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"imsi\":\"001010123456789\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"iccid\":\"8901001234567890123F\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"own_number\":\"not stored or unsupported\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"operator\":\"00101\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"data_connection_known\":true"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"data_connection_active\":true"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"apn\":\"EXAMPLE.APN\""));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"last_updated_ms\":9000"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"sms_queue\":{\"depth\":3,\"pending\":1}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"wifi\":{\"configured\":true,\"connected\":true,\"status\":\"connected\",\"ip\":\"192.168.1.20\"}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"forwarder_http\":{\"configured\":true,\"status\":\"last_success\",\"last_code\":200,\"last_error\":\"\"}"));
@@ -201,7 +234,7 @@ void test_parse_config_save_json_decodes_escaped_values() {
 }
 
 void test_status_page_contains_openwrt_style_dashboard_hooks() {
-  char output[4096];
+  char output[6144];
 
   TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Status, output, sizeof(output)));
 
@@ -212,7 +245,11 @@ void test_status_page_contains_openwrt_style_dashboard_hooks() {
   TEST_ASSERT_NOT_NULL(strstr(output, expectedVersion));
   TEST_ASSERT_NOT_NULL(strstr(output, "System"));
   TEST_ASSERT_NOT_NULL(strstr(output, "WiFi"));
-  TEST_ASSERT_NOT_NULL(strstr(output, "4G Modem"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Modem"));
+  TEST_ASSERT_NULL(strstr(output, "4G Modem"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Manufacturer"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Signal RSRP"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Last updated"));
   TEST_ASSERT_NOT_NULL(strstr(output, "/api/status"));
 }
 

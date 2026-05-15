@@ -9,59 +9,166 @@
 
 static constexpr uint32_t kInitialDelayMs = 5000;
 static constexpr uint32_t kPollIntervalMs = 30000;
+static constexpr uint32_t kStaticRetryIntervalMs = 600000;
 static constexpr uint32_t kCommandTimeoutMs = 3000;
+static constexpr uint32_t kBetweenCommandsMs = 1000;
+static constexpr uint32_t kQueueRetryMs = 5000;
+
+enum class QueryStep : uint8_t {
+  ModuleInfo,
+  Imsi,
+  Iccid,
+  OwnNumber,
+  ExtendedSignal,
+  Registration,
+  Operator,
+  PdpActivation,
+  PdpContext,
+};
+
+static constexpr QueryStep kStaticSteps[] = {
+    QueryStep::ModuleInfo,
+    QueryStep::Imsi,
+    QueryStep::Iccid,
+    QueryStep::OwnNumber,
+};
+
+static constexpr QueryStep kDynamicSteps[] = {
+    QueryStep::ExtendedSignal,
+    QueryStep::Registration,
+    QueryStep::Operator,
+    QueryStep::PdpActivation,
+    QueryStep::PdpContext,
+};
 
 static CellularStatusSnapshot snapshot = {};
 static uint32_t nextPollMs = 0;
+static uint32_t nextDynamicRoundMs = 0;
+static uint32_t nextStaticRetryMs = 0;
 static bool pending = false;
-static bool requestCsq = true;
+static bool activeStaticStep = false;
+static bool staticRetryNeeded = false;
+static uint8_t staticStepIndex = 0;
+static uint8_t dynamicStepIndex = 0;
+static QueryStep activeStep = QueryStep::ExtendedSignal;
 
-static void handleCsqResult(ModemAtResult result, const char* response, void* userData) {
-  (void)userData;
-  pending = false;
-  const uint32_t now = millis();
-  if (result != ModemAtResult::Ok || !CellularStatusCore::parseCsqResponse(response, snapshot, now)) {
-    nextPollMs = now + kPollIntervalMs;
-    logWarn("cellular_status=csq_failed");
-    return;
+static const char* commandForStep(QueryStep step) {
+  switch (step) {
+    case QueryStep::ModuleInfo:
+      return ModemCommands::queryModuleInfo();
+    case QueryStep::Imsi:
+      return ModemCommands::queryImsi();
+    case QueryStep::Iccid:
+      return ModemCommands::queryIccid();
+    case QueryStep::OwnNumber:
+      return ModemCommands::queryOwnNumber();
+    case QueryStep::ExtendedSignal:
+      return ModemCommands::queryExtendedSignal();
+    case QueryStep::Registration:
+      return ModemCommands::queryRegistration();
+    case QueryStep::Operator:
+      return ModemCommands::queryOperator();
+    case QueryStep::PdpActivation:
+      return ModemCommands::queryPdpActivation();
+    case QueryStep::PdpContext:
+      return ModemCommands::queryPdpContext();
   }
-
-  nextPollMs = now + 1000;
-
-  char message[96];
-  snprintf(message,
-           sizeof(message),
-           "cellular_signal csq=%u rssi_dbm=%d",
-           snapshot.csqRssi,
-           static_cast<int>(snapshot.rssiDbm));
-  logInfo(message);
+  return ModemCommands::queryExtendedSignal();
 }
 
-static void handleCeregResult(ModemAtResult result, const char* response, void* userData) {
+static const char* stepName(QueryStep step) {
+  switch (step) {
+    case QueryStep::ModuleInfo:
+      return "module_info";
+    case QueryStep::Imsi:
+      return "imsi";
+    case QueryStep::Iccid:
+      return "iccid";
+    case QueryStep::OwnNumber:
+      return "own_number";
+    case QueryStep::ExtendedSignal:
+      return "cesq";
+    case QueryStep::Registration:
+      return "cereg";
+    case QueryStep::Operator:
+      return "cops";
+    case QueryStep::PdpActivation:
+      return "cgact";
+    case QueryStep::PdpContext:
+      return "cgdcont";
+  }
+  return "unknown";
+}
+
+static bool parseStep(QueryStep step, const char* response, uint32_t now) {
+  switch (step) {
+    case QueryStep::ModuleInfo:
+      return CellularStatusCore::parseAtiResponse(response, snapshot, now);
+    case QueryStep::Imsi:
+      return CellularStatusCore::parseImsiResponse(response, snapshot, now);
+    case QueryStep::Iccid:
+      return CellularStatusCore::parseIccidResponse(response, snapshot, now);
+    case QueryStep::OwnNumber:
+      return CellularStatusCore::parseCnumResponse(response, snapshot, now);
+    case QueryStep::ExtendedSignal:
+      return CellularStatusCore::parseCesqResponse(response, snapshot, now);
+    case QueryStep::Registration:
+      return CellularStatusCore::parseCeregResponse(response, snapshot, now);
+    case QueryStep::Operator:
+      return CellularStatusCore::parseCopsResponse(response, snapshot, now);
+    case QueryStep::PdpActivation:
+      return CellularStatusCore::parseCgactResponse(response, snapshot, now);
+    case QueryStep::PdpContext:
+      return CellularStatusCore::parseCgdccontResponse(response, snapshot, now);
+  }
+  return false;
+}
+
+static void handleQueryResult(ModemAtResult result, const char* response, void* userData) {
   (void)userData;
   pending = false;
   const uint32_t now = millis();
-  if (result != ModemAtResult::Ok || !CellularStatusCore::parseCeregResponse(response, snapshot, now)) {
-    nextPollMs = now + kPollIntervalMs;
-    logWarn("cellular_status=cereg_failed");
-    return;
+  const bool ok = result == ModemAtResult::Ok && parseStep(activeStep, response, now);
+
+  char message[112];
+  if (ok) {
+    snprintf(message, sizeof(message), "cellular_status step=%s ok", stepName(activeStep));
+    logInfo(message);
+  } else {
+    snprintf(message, sizeof(message), "cellular_status step=%s failed", stepName(activeStep));
+    logWarn(message);
   }
 
-  nextPollMs = now + kPollIntervalMs;
+  if (activeStaticStep) {
+    if (!ok) {
+      staticRetryNeeded = true;
+    }
+    ++staticStepIndex;
+    if (staticStepIndex >= sizeof(kStaticSteps) / sizeof(kStaticSteps[0])) {
+      nextStaticRetryMs = staticRetryNeeded ? now + kStaticRetryIntervalMs : 0;
+    }
+  } else {
+    ++dynamicStepIndex;
+    if (dynamicStepIndex >= sizeof(kDynamicSteps) / sizeof(kDynamicSteps[0])) {
+      dynamicStepIndex = 0;
+      nextDynamicRoundMs = now + kPollIntervalMs;
+    }
+  }
 
-  char message[96];
-  snprintf(message,
-           sizeof(message),
-           "cellular_registration status=%s",
-           snapshot.registrationText);
-  logInfo(message);
+  nextPollMs = now + kBetweenCommandsMs;
 }
 
 void cellularStatusBegin() {
   snapshot = {};
   pending = false;
-  requestCsq = true;
-  nextPollMs = millis() + kInitialDelayMs;
+  activeStaticStep = false;
+  staticRetryNeeded = false;
+  staticStepIndex = 0;
+  dynamicStepIndex = 0;
+  const uint32_t now = millis();
+  nextPollMs = now + kInitialDelayMs;
+  nextDynamicRoundMs = now + kInitialDelayMs;
+  nextStaticRetryMs = 0;
 }
 
 void cellularStatusPoll(uint32_t nowMs) {
@@ -69,18 +176,31 @@ void cellularStatusPoll(uint32_t nowMs) {
     return;
   }
 
-  const char* command = requestCsq ? ModemCommands::querySignal() : ModemCommands::queryRegistration();
-  ModemAtCallback callback = requestCsq ? handleCsqResult : handleCeregResult;
-  requestCsq = !requestCsq;
-  nextPollMs = nowMs + kPollIntervalMs;
+  if (staticStepIndex >= sizeof(kStaticSteps) / sizeof(kStaticSteps[0]) &&
+      nextStaticRetryMs != 0 &&
+      static_cast<int32_t>(nowMs - nextStaticRetryMs) >= 0) {
+    staticStepIndex = 0;
+    staticRetryNeeded = false;
+  }
 
-  if (!modemAtSubmit(command, kCommandTimeoutMs, callback, nullptr)) {
-    nextPollMs = nowMs + 5000;
+  if (staticStepIndex < sizeof(kStaticSteps) / sizeof(kStaticSteps[0])) {
+    activeStaticStep = true;
+    activeStep = kStaticSteps[staticStepIndex];
+  } else if (static_cast<int32_t>(nowMs - nextDynamicRoundMs) >= 0) {
+    activeStaticStep = false;
+    activeStep = kDynamicSteps[dynamicStepIndex];
+  } else {
+    nextPollMs = nextDynamicRoundMs;
+    return;
+  }
+
+  if (!modemAtSubmit(commandForStep(activeStep), kCommandTimeoutMs, handleQueryResult, nullptr)) {
+    nextPollMs = nowMs + kQueueRetryMs;
     logWarn("cellular_status=queue_full");
     return;
   }
 
-  nextPollMs = nowMs + 5000;
+  nextPollMs = nowMs + kQueueRetryMs;
   pending = true;
 }
 

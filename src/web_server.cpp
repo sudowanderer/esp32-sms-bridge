@@ -14,7 +14,7 @@
 
 static WebServer server(80);
 static bool started = false;
-static char pageResponse[4096];
+static char pageResponse[6144];
 
 static void sendJsonBuffer(const char* json) {
   server.send(200, "application/json", json);
@@ -71,6 +71,25 @@ static void handleStatus() {
   snapshot.cellularRegistrationKnown = cellular.registrationKnown;
   snapshot.cellularRegistrationStatus = cellular.registrationStatus;
   snprintf(snapshot.cellularRegistrationText, sizeof(snapshot.cellularRegistrationText), "%s", cellular.registrationText);
+  snapshot.cellularLteSignalKnown = cellular.lteSignalKnown;
+  snapshot.cellularRsrpDbm = cellular.rsrpDbm;
+  snapshot.cellularRsrqDbTenths = cellular.rsrqDbTenths;
+  snprintf(snapshot.cellularRsrpQuality,
+           sizeof(snapshot.cellularRsrpQuality),
+           "%s",
+           CellularStatusCore::rsrpQualityName(cellular.rsrpDbm, cellular.lteSignalKnown));
+  snprintf(snapshot.cellularCesqRaw, sizeof(snapshot.cellularCesqRaw), "%s", cellular.cesqRaw);
+  snprintf(snapshot.cellularManufacturer, sizeof(snapshot.cellularManufacturer), "%s", cellular.manufacturer);
+  snprintf(snapshot.cellularModel, sizeof(snapshot.cellularModel), "%s", cellular.model);
+  snprintf(snapshot.cellularFirmware, sizeof(snapshot.cellularFirmware), "%s", cellular.firmware);
+  snprintf(snapshot.cellularImsi, sizeof(snapshot.cellularImsi), "%s", cellular.imsi);
+  snprintf(snapshot.cellularIccid, sizeof(snapshot.cellularIccid), "%s", cellular.iccid);
+  snprintf(snapshot.cellularOwnNumber, sizeof(snapshot.cellularOwnNumber), "%s", cellular.ownNumber);
+  snprintf(snapshot.cellularOperatorName, sizeof(snapshot.cellularOperatorName), "%s", cellular.operatorName);
+  snapshot.cellularDataConnectionKnown = cellular.dataConnectionKnown;
+  snapshot.cellularDataConnectionActive = cellular.dataConnectionActive;
+  snprintf(snapshot.cellularApn, sizeof(snapshot.cellularApn), "%s", cellular.apn);
+  snapshot.cellularLastUpdatedMs = cellular.lastUpdatedMs;
   snapshot.smsQueueDepth = smsQueueDepth();
   snapshot.smsQueuePending = smsQueuePendingCount();
   snapshot.wifiConfigured = wifiManagerIsConfigured();
@@ -85,7 +104,7 @@ static void handleStatus() {
   snprintf(snapshot.forwarderLastError, sizeof(snapshot.forwarderLastError), "%s", forwarderHttpLastError());
   snapshot.loggerCount = loggerCount();
 
-  char response[1024];
+  char response[2048];
   if (!webBuildStatusJson(snapshot, response, sizeof(response))) {
     sendJsonError(500, "status_json_too_large");
     return;

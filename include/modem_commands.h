@@ -10,6 +10,14 @@ const char* smsPduMode();
 const char* smsDirectUrcMode();
 const char* queryRegistration();
 const char* querySignal();
+const char* queryModuleInfo();
+const char* queryExtendedSignal();
+const char* queryImsi();
+const char* queryIccid();
+const char* queryOwnNumber();
+const char* queryOperator();
+const char* queryPdpActivation();
+const char* queryPdpContext();
 
 bool buildReadStoredSms(uint16_t index, char* output, size_t outputSize);
 bool buildDeleteStoredSms(uint16_t index, char* output, size_t outputSize);

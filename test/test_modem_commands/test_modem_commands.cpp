@@ -10,6 +10,14 @@ void test_static_commands_have_business_names() {
   TEST_ASSERT_EQUAL_STRING("AT+CNMI=2,2,0,0,0", ModemCommands::smsDirectUrcMode());
   TEST_ASSERT_EQUAL_STRING("AT+CEREG?", ModemCommands::queryRegistration());
   TEST_ASSERT_EQUAL_STRING("AT+CSQ", ModemCommands::querySignal());
+  TEST_ASSERT_EQUAL_STRING("ATI", ModemCommands::queryModuleInfo());
+  TEST_ASSERT_EQUAL_STRING("AT+CESQ", ModemCommands::queryExtendedSignal());
+  TEST_ASSERT_EQUAL_STRING("AT+CIMI", ModemCommands::queryImsi());
+  TEST_ASSERT_EQUAL_STRING("AT+ICCID", ModemCommands::queryIccid());
+  TEST_ASSERT_EQUAL_STRING("AT+CNUM", ModemCommands::queryOwnNumber());
+  TEST_ASSERT_EQUAL_STRING("AT+COPS?", ModemCommands::queryOperator());
+  TEST_ASSERT_EQUAL_STRING("AT+CGACT?", ModemCommands::queryPdpActivation());
+  TEST_ASSERT_EQUAL_STRING("AT+CGDCONT?", ModemCommands::queryPdpContext());
 }
 
 void test_build_read_stored_sms_command() {

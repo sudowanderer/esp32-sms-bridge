@@ -65,6 +65,68 @@ void test_parse_cereg_response_rejects_invalid_text() {
   TEST_ASSERT_FALSE(status.registrationKnown);
 }
 
+void test_parse_ati_response_sets_module_identity() {
+  CellularStatusSnapshot status = {};
+
+  TEST_ASSERT_TRUE(CellularStatusCore::parseAtiResponse("ATI\r\nCMCC\r\nML307A\r\nML307A-DSLN-MTSH1S00\r\nOK\r\n", status, 4000));
+
+  TEST_ASSERT_TRUE(status.moduleInfoKnown);
+  TEST_ASSERT_EQUAL_STRING("CMCC", status.manufacturer);
+  TEST_ASSERT_EQUAL_STRING("ML307A", status.model);
+  TEST_ASSERT_EQUAL_STRING("ML307A-DSLN-MTSH1S00", status.firmware);
+  TEST_ASSERT_EQUAL_UINT32(4000, status.lastUpdatedMs);
+}
+
+void test_parse_cesq_response_sets_lte_signal_quality() {
+  CellularStatusSnapshot status = {};
+
+  TEST_ASSERT_TRUE(CellularStatusCore::parseCesqResponse("+CESQ: 42,99,255,255,34,47\r\nOK\r\n", status, 5000));
+
+  TEST_ASSERT_TRUE(status.lteSignalKnown);
+  TEST_ASSERT_EQUAL_STRING("42,99,255,255,34,47", status.cesqRaw);
+  TEST_ASSERT_EQUAL_INT16(-93, status.rsrpDbm);
+  TEST_ASSERT_EQUAL_INT16(-25, status.rsrqDbTenths);
+  TEST_ASSERT_EQUAL_STRING("fair", CellularStatusCore::rsrpQualityName(status.rsrpDbm, status.lteSignalKnown));
+  TEST_ASSERT_EQUAL_UINT32(5000, status.lastUpdatedMs);
+}
+
+void test_parse_sim_identity_responses() {
+  CellularStatusSnapshot status = {};
+
+  TEST_ASSERT_TRUE(CellularStatusCore::parseImsiResponse("001010123456789\r\nOK\r\n", status, 6000));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseIccidResponse("+ICCID: 8901001234567890123F\r\nOK\r\n", status, 6100));
+
+  TEST_ASSERT_EQUAL_STRING("001010123456789", status.imsi);
+  TEST_ASSERT_EQUAL_STRING("8901001234567890123F", status.iccid);
+  TEST_ASSERT_EQUAL_UINT32(6100, status.lastUpdatedMs);
+
+  TEST_ASSERT_TRUE(CellularStatusCore::parseIccidResponse("AT+ICCID\r\n8901001234567890123F\r\nOK\r\n", status, 6200));
+  TEST_ASSERT_EQUAL_STRING("8901001234567890123F", status.iccid);
+}
+
+void test_parse_cnum_response_uses_fallback_when_number_missing() {
+  CellularStatusSnapshot status = {};
+
+  TEST_ASSERT_TRUE(CellularStatusCore::parseCnumResponse("OK\r\n", status, 7000));
+
+  TEST_ASSERT_EQUAL_STRING("not stored or unsupported", status.ownNumber);
+  TEST_ASSERT_EQUAL_UINT32(7000, status.lastUpdatedMs);
+}
+
+void test_parse_operator_pdp_and_apn_responses() {
+  CellularStatusSnapshot status = {};
+
+  TEST_ASSERT_TRUE(CellularStatusCore::parseCopsResponse("+COPS: 0,2,\"00101\",7\r\nOK\r\n", status, 8000));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseCgactResponse("+CGACT: 1,1\r\nOK\r\n", status, 8100));
+  TEST_ASSERT_TRUE(CellularStatusCore::parseCgdccontResponse("+CGDCONT: 1,\"IP\",\"EXAMPLE.APN\",\"0.0.0.0\",0,0\r\nOK\r\n", status, 8200));
+
+  TEST_ASSERT_EQUAL_STRING("00101", status.operatorName);
+  TEST_ASSERT_TRUE(status.dataConnectionKnown);
+  TEST_ASSERT_TRUE(status.dataConnectionActive);
+  TEST_ASSERT_EQUAL_STRING("EXAMPLE.APN", status.apn);
+  TEST_ASSERT_EQUAL_UINT32(8200, status.lastUpdatedMs);
+}
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -76,5 +138,10 @@ int main(int argc, char** argv) {
   RUN_TEST(test_parse_cereg_response_sets_registered_home);
   RUN_TEST(test_parse_cereg_response_sets_roaming);
   RUN_TEST(test_parse_cereg_response_rejects_invalid_text);
+  RUN_TEST(test_parse_ati_response_sets_module_identity);
+  RUN_TEST(test_parse_cesq_response_sets_lte_signal_quality);
+  RUN_TEST(test_parse_sim_identity_responses);
+  RUN_TEST(test_parse_cnum_response_uses_fallback_when_number_missing);
+  RUN_TEST(test_parse_operator_pdp_and_apn_responses);
   return UNITY_END();
 }

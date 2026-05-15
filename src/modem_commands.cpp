@@ -43,6 +43,38 @@ const char* querySignal() {
   return "AT+CSQ";
 }
 
+const char* queryModuleInfo() {
+  return "ATI";
+}
+
+const char* queryExtendedSignal() {
+  return "AT+CESQ";
+}
+
+const char* queryImsi() {
+  return "AT+CIMI";
+}
+
+const char* queryIccid() {
+  return "AT+ICCID";
+}
+
+const char* queryOwnNumber() {
+  return "AT+CNUM";
+}
+
+const char* queryOperator() {
+  return "AT+COPS?";
+}
+
+const char* queryPdpActivation() {
+  return "AT+CGACT?";
+}
+
+const char* queryPdpContext() {
+  return "AT+CGDCONT?";
+}
+
 bool buildReadStoredSms(uint16_t index, char* output, size_t outputSize) {
   return buildIndexedCommand("AT+CMGR=", index, output, outputSize);
 }

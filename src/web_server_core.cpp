@@ -367,7 +367,32 @@ bool webBuildStatusJson(const WebStatusSnapshot& status, char* output, size_t ou
                       boolJson(status.cellularRegistrationKnown),
                       status.cellularRegistrationStatus);
   writer.appendEscaped(status.cellularRegistrationText);
-  writer.append("\"},");
+  writer.appendFormat("\",\"lte_signal_known\":%s,\"rsrp_dbm\":%d,\"rsrq_db_tenths\":%d,\"rsrp_quality\":\"",
+                      boolJson(status.cellularLteSignalKnown),
+                      static_cast<int>(status.cellularRsrpDbm),
+                      static_cast<int>(status.cellularRsrqDbTenths));
+  writer.appendEscaped(status.cellularRsrpQuality);
+  writer.append("\",\"cesq_raw\":\"");
+  writer.appendEscaped(status.cellularCesqRaw);
+  writer.append("\",\"manufacturer\":\"");
+  writer.appendEscaped(status.cellularManufacturer);
+  writer.append("\",\"model\":\"");
+  writer.appendEscaped(status.cellularModel);
+  writer.append("\",\"firmware\":\"");
+  writer.appendEscaped(status.cellularFirmware);
+  writer.append("\",\"imsi\":\"");
+  writer.appendEscaped(status.cellularImsi);
+  writer.append("\",\"iccid\":\"");
+  writer.appendEscaped(status.cellularIccid);
+  writer.append("\",\"own_number\":\"");
+  writer.appendEscaped(status.cellularOwnNumber);
+  writer.append("\",\"operator\":\"");
+  writer.appendEscaped(status.cellularOperatorName);
+  writer.appendFormat("\",\"data_connection_known\":%s,\"data_connection_active\":%s,\"apn\":\"",
+                      boolJson(status.cellularDataConnectionKnown),
+                      boolJson(status.cellularDataConnectionActive));
+  writer.appendEscaped(status.cellularApn);
+  writer.appendFormat("\",\"last_updated_ms\":%lu},", static_cast<unsigned long>(status.cellularLastUpdatedMs));
   writer.appendFormat("\"sms_queue\":{\"depth\":%u,\"pending\":%u},", status.smsQueueDepth, status.smsQueuePending);
   writer.appendFormat("\"wifi\":{\"configured\":%s,\"connected\":%s,\"status\":\"",
                       boolJson(status.wifiConfigured),
@@ -412,11 +437,17 @@ static bool appendPageScript(JsonWriter& writer, WebPageKind page) {
           "<script>"
           "const $=id=>document.getElementById(id);"
           "function fmtMs(ms){const s=Math.floor(ms/1000),d=Math.floor(s/86400),h=Math.floor(s/3600)%24,m=Math.floor(s/60)%60;return (d?d+'d ':'')+h+'h '+m+'m';}"
+          "function ago(now,then){if(!then)return'unknown';const s=Math.max(0,Math.floor((now-then)/1000));return s<60?s+'s ago':Math.floor(s/60)+'m ago';}"
+          "function val(v){return v||'unknown';}"
+          "function rsrq(v){return (v/10).toFixed(1)+' dB';}"
           "async function load(){const r=await fetch('/api/status');const j=await r.json();"
           "$('uptime').textContent=fmtMs(j.uptime_ms);$('heap').textContent=j.free_heap;"
           "$('wifi').textContent=j.wifi.status+(j.wifi.ip?' / '+j.wifi.ip:'');"
-          "$('cell').textContent=(j.cellular.registration||'unknown')+' / '+(j.cellular.signal_known?j.cellular.rssi_dbm+' dBm (CSQ '+j.cellular.csq+')':'signal unknown');"
           "$('modem').textContent=(j.modem.busy?'busy':'idle')+' / queue '+j.modem.queue_depth;"
+          "$('modem_mfr').textContent=val(j.cellular.manufacturer);$('modem_model').textContent=val(j.cellular.model);$('modem_fw').textContent=val(j.cellular.firmware);"
+          "$('modem_rsrp').textContent=j.cellular.lte_signal_known?j.cellular.rsrp_dbm+' dBm ('+j.cellular.rsrp_quality+')':'unknown';$('modem_rsrq').textContent=j.cellular.lte_signal_known?rsrq(j.cellular.rsrq_db_tenths):'unknown';$('modem_cesq').textContent=val(j.cellular.cesq_raw);"
+          "$('modem_imsi').textContent=val(j.cellular.imsi);$('modem_iccid').textContent=val(j.cellular.iccid);$('modem_num').textContent=val(j.cellular.own_number);"
+          "$('modem_reg').textContent=val(j.cellular.registration);$('modem_op').textContent=val(j.cellular.operator);$('modem_data').textContent=j.cellular.data_connection_known?(j.cellular.data_connection_active?'active':'inactive'):'unknown';$('modem_apn').textContent=val(j.cellular.apn);$('modem_updated').textContent=ago(j.uptime_ms,j.cellular.last_updated_ms);"
           "$('sms').textContent='depth '+j.sms_queue.depth+' / pending '+j.sms_queue.pending;"
           "$('push').textContent=j.forwarder_http.status+' / code '+j.forwarder_http.last_code;"
           "$('logs').textContent=j.logs.count;}"
@@ -496,10 +527,25 @@ bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize) {
           "</table></section>"
           "<section><h2>Network</h2><table>"
           "<tr><td>WiFi</td><td id=\"wifi\">loading</td></tr>"
-          "<tr><td>4G Modem</td><td id=\"cell\">loading</td></tr>"
+          "<tr><td>Modem AT</td><td id=\"modem\">loading</td></tr>"
+          "</table></section>"
+          "<section><h2>Modem</h2><table>"
+          "<tr><td>Manufacturer</td><td id=\"modem_mfr\">loading</td></tr>"
+          "<tr><td>Model</td><td id=\"modem_model\">loading</td></tr>"
+          "<tr><td>Firmware</td><td id=\"modem_fw\">loading</td></tr>"
+          "<tr><td>Signal RSRP</td><td id=\"modem_rsrp\">loading</td></tr>"
+          "<tr><td>Signal RSRQ</td><td id=\"modem_rsrq\">loading</td></tr>"
+          "<tr><td>Raw CESQ</td><td id=\"modem_cesq\">loading</td></tr>"
+          "<tr><td>IMSI</td><td id=\"modem_imsi\">loading</td></tr>"
+          "<tr><td>ICCID</td><td id=\"modem_iccid\">loading</td></tr>"
+          "<tr><td>Own number</td><td id=\"modem_num\">loading</td></tr>"
+          "<tr><td>Registration</td><td id=\"modem_reg\">loading</td></tr>"
+          "<tr><td>Operator</td><td id=\"modem_op\">loading</td></tr>"
+          "<tr><td>Data connection</td><td id=\"modem_data\">loading</td></tr>"
+          "<tr><td>APN</td><td id=\"modem_apn\">loading</td></tr>"
+          "<tr><td>Last updated</td><td id=\"modem_updated\">loading</td></tr>"
           "</table></section>"
           "<section><h2>Services</h2><table>"
-          "<tr><td>Modem AT</td><td id=\"modem\">loading</td></tr>"
           "<tr><td>SMS Queue</td><td id=\"sms\">loading</td></tr>"
           "<tr><td>HTTP Forwarder</td><td id=\"push\">loading</td></tr>"
           "</table></section>");
