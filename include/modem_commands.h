@@ -17,6 +17,7 @@ const char* queryIccid();
 const char* queryOwnNumber();
 const char* queryOperator();
 const char* queryPdpActivation();
+const char* deactivatePdpContext();
 const char* queryPdpContext();
 
 bool buildReadStoredSms(uint16_t index, char* output, size_t outputSize);

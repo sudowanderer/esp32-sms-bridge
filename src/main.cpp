@@ -9,6 +9,7 @@
 #include "sms_queue.h"
 #include "sms_receiver.h"
 #include "sms_storage_reader_core.h"
+#include "startup_commands.h"
 #include "web_server.h"
 #include "wifi_manager.h"
 
@@ -291,10 +292,9 @@ static void submitStartupCommand(const char* command) {
 }
 
 static void submitStartupCommands() {
-  submitStartupCommand(ModemCommands::attention());
-  submitStartupCommand(ModemCommands::smsPduMode());
-  submitStartupCommand(ModemCommands::smsDirectUrcMode());
-  submitStartupCommand(ModemCommands::queryRegistration());
+  for (size_t i = 0; i < StartupCommands::count(); ++i) {
+    submitStartupCommand(StartupCommands::at(i));
+  }
 }
 
 void setup() {

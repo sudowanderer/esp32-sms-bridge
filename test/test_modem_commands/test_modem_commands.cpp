@@ -17,6 +17,7 @@ void test_static_commands_have_business_names() {
   TEST_ASSERT_EQUAL_STRING("AT+CNUM", ModemCommands::queryOwnNumber());
   TEST_ASSERT_EQUAL_STRING("AT+COPS?", ModemCommands::queryOperator());
   TEST_ASSERT_EQUAL_STRING("AT+CGACT?", ModemCommands::queryPdpActivation());
+  TEST_ASSERT_EQUAL_STRING("AT+CGACT=0,1", ModemCommands::deactivatePdpContext());
   TEST_ASSERT_EQUAL_STRING("AT+CGDCONT?", ModemCommands::queryPdpContext());
 }
 

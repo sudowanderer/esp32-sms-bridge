@@ -71,6 +71,10 @@ const char* queryPdpActivation() {
   return "AT+CGACT?";
 }
 
+const char* deactivatePdpContext() {
+  return "AT+CGACT=0,1";
+}
+
 const char* queryPdpContext() {
   return "AT+CGDCONT?";
 }
