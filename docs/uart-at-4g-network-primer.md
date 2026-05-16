@@ -242,6 +242,7 @@ AT+CESQ
 - NTP 时间同步
 
 但这些能力是否存在、具体命令是什么，要查 ML307R 的 AT 指令手册。
+当前仓库内的官方手册是 [ML307R_ATCommands.pdf](ML307R_ATCommands.pdf)，开发时应优先参考该文件，而不是网上零散资料。
 
 ## 短信为什么是 PDU
 
