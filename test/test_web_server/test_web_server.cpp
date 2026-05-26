@@ -32,6 +32,14 @@ void test_status_json_contains_runtime_state() {
   status.freeHeap = 210000;
   status.modemBusy = true;
   status.modemQueueDepth = 2;
+  status.modemSimState = ModemSimState::Removed;
+  strncpy(status.modemLastEvent, "sim_removed", sizeof(status.modemLastEvent) - 1);
+  status.modemMatreadyCount = 4;
+  status.modemCpinReadyCount = 5;
+  status.modemSimRemovedCount = 3;
+  status.modemLastMatreadyMs = 11000;
+  status.modemLastCpinReadyMs = 12000;
+  status.modemLastSimRemovedMs = 12300;
   status.cellularSignalKnown = true;
   status.cellularCsq = 20;
   status.cellularRssiDbm = -73;
@@ -72,6 +80,7 @@ void test_status_json_contains_runtime_state() {
   TEST_ASSERT_NOT_NULL(strstr(output, "\"uptime_ms\":12345"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"free_heap\":210000"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"modem\":{\"busy\":true,\"queue_depth\":2}"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"modem_events\":{\"sim_state\":\"removed\",\"last_event\":\"sim_removed\",\"matready_count\":4,\"cpin_ready_count\":5,\"sim_removed_count\":3,\"last_matready_ms\":11000,\"last_cpin_ready_ms\":12000,\"last_sim_removed_ms\":12300}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"signal_known\":true"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"rssi_dbm\":-73"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"registration\":\"registered_home\""));
@@ -234,7 +243,7 @@ void test_parse_config_save_json_decodes_escaped_values() {
 }
 
 void test_status_page_contains_openwrt_style_dashboard_hooks() {
-  char output[6144];
+  char output[8192];
 
   TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Status, output, sizeof(output)));
 
@@ -246,6 +255,9 @@ void test_status_page_contains_openwrt_style_dashboard_hooks() {
   TEST_ASSERT_NOT_NULL(strstr(output, "System"));
   TEST_ASSERT_NOT_NULL(strstr(output, "WiFi"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Modem"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "SIM state"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "SIM removed count"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "MATREADY count"));
   TEST_ASSERT_NULL(strstr(output, "4G Modem"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Manufacturer"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Signal RSRP"));

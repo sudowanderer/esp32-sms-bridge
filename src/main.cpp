@@ -6,6 +6,7 @@
 #include "logger.h"
 #include "modem_at.h"
 #include "modem_commands.h"
+#include "modem_events.h"
 #include "pdp_guard_core.h"
 #include "serial_at_console.h"
 #include "sms_queue.h"
@@ -160,10 +161,27 @@ static void printSmsError(const char* reason, const char* rawLine, void* userDat
 static void handleModemUrc(const char* line, void* userData) {
   (void)userData;
 
+  const uint32_t now = millis();
+  const bool trackedModemEvent = modemEventsOnUrc(line, now);
+
   startupSequencer.onUrc(line, millis());
   if (strcmp(line, "+MATREADY") == 0 && !startupMatreadySeenLogged) {
     startupMatreadySeenLogged = true;
     logInfo("startup_at_status=matready_seen");
+  }
+
+  if (trackedModemEvent) {
+    char message[96];
+    if (strcmp(line, "+MATREADY") == 0) {
+      snprintf(message, sizeof(message), "modem_urc=matready");
+      logInfo(message);
+    } else if (strncmp(line, "+CPIN: SIM REMOVED", 18) == 0) {
+      snprintf(message, sizeof(message), "modem_urc=sim_removed");
+      logWarn(message);
+    } else if (strncmp(line, "+CPIN: READY", 12) == 0) {
+      snprintf(message, sizeof(message), "modem_urc=cpin_ready");
+      logInfo(message);
+    }
   }
 
   if (smsReceiverOnUrc(line)) {
@@ -385,6 +403,7 @@ void setup() {
   Serial.println(ESP.getFlashChipSize());
 
   modemAtBegin();
+  modemEventsBegin();
   smsReceiverBegin();
   smsStorageReader.begin();
   smsStorageReader.setStatusCallback(handleStorageReaderStatus, nullptr);
@@ -414,6 +433,7 @@ void loop() {
   submitStoredSmsDeleteIfReady();
   submitStoredSmsReadIfReady();
   const uint32_t now = millis();
+  modemEventsPoll(now);
   pollStartupSequencer(now);
   pollPdpGuard(now);
   cellularStatusPoll(now);

@@ -5,6 +5,7 @@
 #include "forwarder_http.h"
 #include "logger.h"
 #include "modem_at.h"
+#include "modem_events.h"
 #include "sms_queue.h"
 #include "web_server_core.h"
 #include "wifi_manager.h"
@@ -14,7 +15,7 @@
 
 static WebServer server(80);
 static bool started = false;
-static char pageResponse[6144];
+static char pageResponse[8192];
 
 static void sendJsonBuffer(const char* json) {
   server.send(200, "application/json", json);
@@ -65,6 +66,16 @@ static void handleStatus() {
   snapshot.freeHeap = ESP.getFreeHeap();
   snapshot.modemBusy = modemAtIsBusy();
   snapshot.modemQueueDepth = modemAtQueueDepth();
+  modemEventsPoll(snapshot.uptimeMs);
+  ModemEventsSnapshot modemEvents = modemEventsGet();
+  snapshot.modemSimState = modemEvents.simState;
+  snprintf(snapshot.modemLastEvent, sizeof(snapshot.modemLastEvent), "%s", modemEvents.lastEvent);
+  snapshot.modemMatreadyCount = modemEvents.matreadyCount;
+  snapshot.modemCpinReadyCount = modemEvents.cpinReadyCount;
+  snapshot.modemSimRemovedCount = modemEvents.simRemovedCount;
+  snapshot.modemLastMatreadyMs = modemEvents.lastMatreadyMs;
+  snapshot.modemLastCpinReadyMs = modemEvents.lastCpinReadyMs;
+  snapshot.modemLastSimRemovedMs = modemEvents.lastSimRemovedMs;
   snapshot.cellularSignalKnown = cellular.signalKnown;
   snapshot.cellularCsq = cellular.csqRssi;
   snapshot.cellularRssiDbm = cellular.rssiDbm;

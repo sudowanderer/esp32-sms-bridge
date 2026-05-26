@@ -360,6 +360,16 @@ bool webBuildStatusJson(const WebStatusSnapshot& status, char* output, size_t ou
   writer.appendFormat("\"uptime_ms\":%lu,", static_cast<unsigned long>(status.uptimeMs));
   writer.appendFormat("\"free_heap\":%lu,", static_cast<unsigned long>(status.freeHeap));
   writer.appendFormat("\"modem\":{\"busy\":%s,\"queue_depth\":%u},", boolJson(status.modemBusy), status.modemQueueDepth);
+  writer.appendFormat("\"modem_events\":{\"sim_state\":\"%s\",\"last_event\":\"",
+                      ModemEventsCore::simStateName(status.modemSimState));
+  writer.appendEscaped(status.modemLastEvent);
+  writer.appendFormat("\",\"matready_count\":%u,\"cpin_ready_count\":%u,\"sim_removed_count\":%u,\"last_matready_ms\":%lu,\"last_cpin_ready_ms\":%lu,\"last_sim_removed_ms\":%lu},",
+                      status.modemMatreadyCount,
+                      status.modemCpinReadyCount,
+                      status.modemSimRemovedCount,
+                      static_cast<unsigned long>(status.modemLastMatreadyMs),
+                      static_cast<unsigned long>(status.modemLastCpinReadyMs),
+                      static_cast<unsigned long>(status.modemLastSimRemovedMs));
   writer.appendFormat("\"cellular\":{\"signal_known\":%s,\"csq\":%u,\"rssi_dbm\":%d,\"registration_known\":%s,\"registration_status\":%u,\"registration\":\"",
                       boolJson(status.cellularSignalKnown),
                       status.cellularCsq,
@@ -445,6 +455,7 @@ static bool appendPageScript(JsonWriter& writer, WebPageKind page) {
           "$('uptime').textContent=fmtMs(j.uptime_ms);$('heap').textContent=j.free_heap;"
           "$('wifi').textContent=j.wifi.status+(j.wifi.ip?' / '+j.wifi.ip:'');"
           "$('modem').textContent=(j.modem.busy?'busy':'idle')+' / queue '+j.modem.queue_depth;"
+          "$('modem_sim').textContent=j.modem_events.sim_state;$('modem_sim_removed').textContent=j.modem_events.sim_removed_count;$('modem_last_event').textContent=val(j.modem_events.last_event);$('modem_matready').textContent=j.modem_events.matready_count;"
           "$('modem_mfr').textContent=val(j.cellular.manufacturer);$('modem_model').textContent=val(j.cellular.model);$('modem_fw').textContent=val(j.cellular.firmware);"
           "const q=sig(j.cellular.rsrp_quality);$('signal_icon').className='signal-icon signal-'+q;$('modem_rsrp_text').textContent=j.cellular.lte_signal_known?j.cellular.rsrp_dbm+' dBm ('+j.cellular.rsrp_quality+')':'unknown';$('modem_rsrq').textContent=j.cellular.lte_signal_known?rsrq(j.cellular.rsrq_db_tenths):'unknown';$('modem_cesq').textContent=val(j.cellular.cesq_raw);"
           "$('modem_imsi').textContent=val(j.cellular.imsi);$('modem_iccid').textContent=val(j.cellular.iccid);$('modem_num').textContent=val(j.cellular.own_number);"
@@ -538,6 +549,10 @@ bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize) {
           "<tr><td>Modem AT</td><td id=\"modem\">loading</td></tr>"
           "</table></section>"
           "<section><h2>Modem</h2><table>"
+          "<tr><td>SIM state</td><td id=\"modem_sim\">loading</td></tr>"
+          "<tr><td>SIM removed count</td><td id=\"modem_sim_removed\">loading</td></tr>"
+          "<tr><td>Last SIM event</td><td id=\"modem_last_event\">loading</td></tr>"
+          "<tr><td>MATREADY count</td><td id=\"modem_matready\">loading</td></tr>"
           "<tr><td>Manufacturer</td><td id=\"modem_mfr\">loading</td></tr>"
           "<tr><td>Model</td><td id=\"modem_model\">loading</td></tr>"
           "<tr><td>Firmware</td><td id=\"modem_fw\">loading</td></tr>"

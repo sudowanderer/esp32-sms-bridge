@@ -2,6 +2,7 @@
 
 #include "config_store_core.h"
 #include "logger_core.h"
+#include "modem_events_core.h"
 #include "sms_queue_core.h"
 
 #include <stddef.h>
@@ -12,6 +13,14 @@ struct WebStatusSnapshot {
   uint32_t freeHeap;
   bool modemBusy;
   uint8_t modemQueueDepth;
+  ModemSimState modemSimState;
+  char modemLastEvent[24];
+  uint16_t modemMatreadyCount;
+  uint16_t modemCpinReadyCount;
+  uint16_t modemSimRemovedCount;
+  uint32_t modemLastMatreadyMs;
+  uint32_t modemLastCpinReadyMs;
+  uint32_t modemLastSimRemovedMs;
   bool cellularSignalKnown;
   uint8_t cellularCsq;
   int16_t cellularRssiDbm;
