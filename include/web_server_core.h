@@ -49,6 +49,8 @@ struct WebStatusSnapshot {
   bool wifiConnected;
   char wifiStatus[24];
   char wifiIp[40];
+  char wifiConfiguredHostname[32];
+  char wifiActiveHostname[32];
   bool forwarderConfigured;
   char forwarderStatus[32];
   int forwarderLastCode;
@@ -60,6 +62,7 @@ enum class WebConfigParseResult {
   Ok,
   InvalidJson,
   ValueTooLong,
+  InvalidHostname,
 };
 
 bool webJsonEscape(const char* input, char* output, size_t outputSize);

@@ -12,6 +12,7 @@ void test_default_config_is_empty_and_versioned() {
   TEST_ASSERT_EQUAL(ConfigStoreCore::kCurrentVersion, config.version);
   TEST_ASSERT_EQUAL_STRING("", config.wifiSsid);
   TEST_ASSERT_EQUAL_STRING("", config.wifiPassword);
+  TEST_ASSERT_EQUAL_STRING("", config.hostname);
   TEST_ASSERT_EQUAL_STRING("", config.barkServerUrl);
   TEST_ASSERT_EQUAL_STRING("", config.barkDeviceKey);
   TEST_ASSERT_FALSE(ConfigStoreCore::hasWifiConfig(config));
@@ -63,8 +64,24 @@ void test_sanitize_restores_version_and_string_termination() {
   TEST_ASSERT_EQUAL(ConfigStoreCore::kCurrentVersion, config.version);
   TEST_ASSERT_EQUAL('\0', config.wifiSsid[sizeof(config.wifiSsid) - 1]);
   TEST_ASSERT_EQUAL('\0', config.wifiPassword[sizeof(config.wifiPassword) - 1]);
+  TEST_ASSERT_EQUAL('\0', config.hostname[sizeof(config.hostname) - 1]);
   TEST_ASSERT_EQUAL('\0', config.barkServerUrl[sizeof(config.barkServerUrl) - 1]);
   TEST_ASSERT_EQUAL('\0', config.barkDeviceKey[sizeof(config.barkDeviceKey) - 1]);
+}
+
+void test_hostname_validation_accepts_dns_label_subset() {
+  TEST_ASSERT_TRUE(ConfigStoreCore::isValidHostname(""));
+  TEST_ASSERT_TRUE(ConfigStoreCore::isValidHostname("sms-bridge"));
+  TEST_ASSERT_TRUE(ConfigStoreCore::isValidHostname("SMSBridge01"));
+  TEST_ASSERT_TRUE(ConfigStoreCore::isValidHostname("a"));
+}
+
+void test_hostname_validation_rejects_invalid_names() {
+  TEST_ASSERT_FALSE(ConfigStoreCore::isValidHostname("-sms-bridge"));
+  TEST_ASSERT_FALSE(ConfigStoreCore::isValidHostname("sms-bridge-"));
+  TEST_ASSERT_FALSE(ConfigStoreCore::isValidHostname("sms_bridge"));
+  TEST_ASSERT_FALSE(ConfigStoreCore::isValidHostname("sms bridge"));
+  TEST_ASSERT_FALSE(ConfigStoreCore::isValidHostname("abcdefghijklmnopqrstuvwxyzabcdef"));
 }
 
 void test_config_struct_can_round_trip_after_sanitize() {
@@ -72,6 +89,7 @@ void test_config_struct_can_round_trip_after_sanitize() {
   ConfigStoreCore::defaults(saved);
   ConfigStoreCore::copyString(saved.wifiSsid, sizeof(saved.wifiSsid), "O2");
   ConfigStoreCore::copyString(saved.wifiPassword, sizeof(saved.wifiPassword), "secret");
+  ConfigStoreCore::copyString(saved.hostname, sizeof(saved.hostname), "sms-bridge");
   ConfigStoreCore::copyString(saved.barkServerUrl, sizeof(saved.barkServerUrl), "https://api.day.app");
   ConfigStoreCore::copyString(saved.barkDeviceKey, sizeof(saved.barkDeviceKey), "device-key");
 
@@ -91,6 +109,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_missing_bark_device_key_is_unconfigured);
   RUN_TEST(test_copy_string_truncates_and_null_terminates);
   RUN_TEST(test_sanitize_restores_version_and_string_termination);
+  RUN_TEST(test_hostname_validation_accepts_dns_label_subset);
+  RUN_TEST(test_hostname_validation_rejects_invalid_names);
   RUN_TEST(test_config_struct_can_round_trip_after_sanitize);
   return UNITY_END();
 }

@@ -68,6 +68,8 @@ void test_status_json_contains_runtime_state() {
   status.wifiConnected = true;
   strncpy(status.wifiStatus, "connected", sizeof(status.wifiStatus) - 1);
   strncpy(status.wifiIp, "192.168.1.20", sizeof(status.wifiIp) - 1);
+  strncpy(status.wifiConfiguredHostname, "sms-bridge", sizeof(status.wifiConfiguredHostname) - 1);
+  strncpy(status.wifiActiveHostname, "sms-bridge-active", sizeof(status.wifiActiveHostname) - 1);
   status.forwarderConfigured = true;
   strncpy(status.forwarderStatus, "last_success", sizeof(status.forwarderStatus) - 1);
   status.forwarderLastCode = 200;
@@ -100,7 +102,7 @@ void test_status_json_contains_runtime_state() {
   TEST_ASSERT_NOT_NULL(strstr(output, "\"apn\":\"EXAMPLE.APN\""));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"last_updated_ms\":9000"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"sms_queue\":{\"depth\":3,\"pending\":1}"));
-  TEST_ASSERT_NOT_NULL(strstr(output, "\"wifi\":{\"configured\":true,\"connected\":true,\"status\":\"connected\",\"ip\":\"192.168.1.20\"}"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"wifi\":{\"configured\":true,\"connected\":true,\"status\":\"connected\",\"ip\":\"192.168.1.20\",\"configured_hostname\":\"sms-bridge\",\"active_hostname\":\"sms-bridge-active\",\"hostname\":\"sms-bridge-active\"}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"forwarder_http\":{\"configured\":true,\"status\":\"last_success\",\"last_code\":200,\"last_error\":\"\"}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"logs\":{\"count\":7}"));
 }
@@ -153,6 +155,7 @@ void test_config_json_redacts_sensitive_fields() {
   config.version = ConfigStoreCore::kCurrentVersion;
   strncpy(config.wifiSsid, "Lab \"WiFi\"", sizeof(config.wifiSsid) - 1);
   strncpy(config.wifiPassword, "secret-password", sizeof(config.wifiPassword) - 1);
+  strncpy(config.hostname, "sms-bridge", sizeof(config.hostname) - 1);
   strncpy(config.barkServerUrl, "https://api.day.app", sizeof(config.barkServerUrl) - 1);
   strncpy(config.barkDeviceKey, "device-key", sizeof(config.barkDeviceKey) - 1);
 
@@ -160,6 +163,7 @@ void test_config_json_redacts_sensitive_fields() {
   TEST_ASSERT_TRUE(webBuildConfigJson(config, output, sizeof(output)));
 
   TEST_ASSERT_NOT_NULL(strstr(output, "\"wifi\":{\"configured\":true,\"ssid\":\"Lab \\\"WiFi\\\"\",\"password_set\":true}"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"hostname\":\"sms-bridge\""));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"bark\":{\"configured\":true,\"server_url\":\"https://api.day.app\",\"device_key_set\":true}"));
   TEST_ASSERT_NULL(strstr(output, "secret-password"));
   TEST_ASSERT_NULL(strstr(output, "device-key"));
@@ -174,6 +178,7 @@ void test_config_json_marks_missing_config() {
 
   TEST_ASSERT_NOT_NULL(strstr(output, "\"version\":1"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"wifi\":{\"configured\":false,\"ssid\":\"\",\"password_set\":false}"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"hostname\":\"\""));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"bark\":{\"configured\":false,\"server_url\":\"\",\"device_key_set\":false}"));
 }
 
@@ -182,12 +187,13 @@ void test_parse_config_save_json_updates_strings() {
   ConfigStoreCore::defaults(config);
 
   WebConfigParseResult result = webParseConfigSaveJson(
-      "{\"wifi_ssid\":\"Home\",\"wifi_password\":\"wifi-pass\",\"bark_server_url\":\"https://api.day.app\",\"bark_device_key\":\"key-123\"}",
+      "{\"wifi_ssid\":\"Home\",\"wifi_password\":\"wifi-pass\",\"hostname\":\"sms-bridge\",\"bark_server_url\":\"https://api.day.app\",\"bark_device_key\":\"key-123\"}",
       config);
 
   TEST_ASSERT_EQUAL(WebConfigParseResult::Ok, result);
   TEST_ASSERT_EQUAL_STRING("Home", config.wifiSsid);
   TEST_ASSERT_EQUAL_STRING("wifi-pass", config.wifiPassword);
+  TEST_ASSERT_EQUAL_STRING("sms-bridge", config.hostname);
   TEST_ASSERT_EQUAL_STRING("https://api.day.app", config.barkServerUrl);
   TEST_ASSERT_EQUAL_STRING("key-123", config.barkDeviceKey);
 }
@@ -196,16 +202,18 @@ void test_parse_config_save_json_allows_clearing_fields() {
   DeviceConfig config = {};
   strncpy(config.wifiSsid, "Home", sizeof(config.wifiSsid) - 1);
   strncpy(config.wifiPassword, "wifi-pass", sizeof(config.wifiPassword) - 1);
+  strncpy(config.hostname, "sms-bridge", sizeof(config.hostname) - 1);
   strncpy(config.barkServerUrl, "https://api.day.app", sizeof(config.barkServerUrl) - 1);
   strncpy(config.barkDeviceKey, "key-123", sizeof(config.barkDeviceKey) - 1);
 
   WebConfigParseResult result = webParseConfigSaveJson(
-      "{\"wifi_ssid\":\"\",\"wifi_password\":\"\",\"bark_server_url\":\"\",\"bark_device_key\":\"\"}",
+      "{\"wifi_ssid\":\"\",\"wifi_password\":\"\",\"hostname\":\"\",\"bark_server_url\":\"\",\"bark_device_key\":\"\"}",
       config);
 
   TEST_ASSERT_EQUAL(WebConfigParseResult::Ok, result);
   TEST_ASSERT_EQUAL_STRING("", config.wifiSsid);
   TEST_ASSERT_EQUAL_STRING("", config.wifiPassword);
+  TEST_ASSERT_EQUAL_STRING("", config.hostname);
   TEST_ASSERT_EQUAL_STRING("", config.barkServerUrl);
   TEST_ASSERT_EQUAL_STRING("", config.barkDeviceKey);
 }
@@ -225,6 +233,15 @@ void test_parse_config_save_json_rejects_too_long_value() {
   TEST_ASSERT_EQUAL(WebConfigParseResult::ValueTooLong,
                     webParseConfigSaveJson("{\"wifi_ssid\":\"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz\"}", config));
   TEST_ASSERT_EQUAL_STRING("", config.wifiSsid);
+}
+
+void test_parse_config_save_json_rejects_invalid_hostname() {
+  DeviceConfig config = {};
+  ConfigStoreCore::defaults(config);
+
+  TEST_ASSERT_EQUAL(WebConfigParseResult::InvalidHostname,
+                    webParseConfigSaveJson("{\"hostname\":\"sms_bridge\"}", config));
+  TEST_ASSERT_EQUAL_STRING("", config.hostname);
 }
 
 void test_parse_config_save_json_decodes_escaped_values() {
@@ -253,6 +270,10 @@ void test_status_page_contains_openwrt_style_dashboard_hooks() {
   TEST_ASSERT_NOT_NULL(strstr(output, "SMS Bridge"));
   TEST_ASSERT_NOT_NULL(strstr(output, expectedVersion));
   TEST_ASSERT_NOT_NULL(strstr(output, "System"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Configured hostname"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "Active hostname"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "wifi_cfg_hostname"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "wifi_active_hostname"));
   TEST_ASSERT_NOT_NULL(strstr(output, "WiFi"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Modem"));
   TEST_ASSERT_NOT_NULL(strstr(output, "SIM state"));
@@ -271,7 +292,7 @@ void test_status_page_contains_openwrt_style_dashboard_hooks() {
 }
 
 void test_config_page_posts_json_to_config_api() {
-  char output[4096];
+  char output[8192];
 
   TEST_ASSERT_TRUE(webBuildPageHtml(WebPageKind::Config, output, sizeof(output)));
 
@@ -279,6 +300,10 @@ void test_config_page_posts_json_to_config_api() {
   TEST_ASSERT_NOT_NULL(strstr(output, "/api/config"));
   TEST_ASSERT_NOT_NULL(strstr(output, "/api/config/save"));
   TEST_ASSERT_NOT_NULL(strstr(output, "wifi_ssid"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "hostname"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "$('hostname').value"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "/api/wifi/reconnect"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "wifi_reconnect"));
   TEST_ASSERT_NOT_NULL(strstr(output, "bark_device_key"));
   TEST_ASSERT_NOT_NULL(strstr(output, "leave blank to keep"));
   TEST_ASSERT_NOT_NULL(strstr(output, "if($('wifi_password').value)"));
@@ -322,6 +347,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_parse_config_save_json_allows_clearing_fields);
   RUN_TEST(test_parse_config_save_json_rejects_invalid_json);
   RUN_TEST(test_parse_config_save_json_rejects_too_long_value);
+  RUN_TEST(test_parse_config_save_json_rejects_invalid_hostname);
   RUN_TEST(test_parse_config_save_json_decodes_escaped_values);
   RUN_TEST(test_status_page_contains_openwrt_style_dashboard_hooks);
   RUN_TEST(test_config_page_posts_json_to_config_api);

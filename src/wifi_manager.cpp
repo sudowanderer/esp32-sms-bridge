@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 static WifiManagerCore wifiCore;
+static bool reconnectRequested = false;
 
 static bool hasWifiCredentials() {
   return ConfigStoreCore::hasWifiConfig(configStoreGet());
@@ -14,10 +15,15 @@ static bool hasWifiCredentials() {
 
 static void startWifiConnection() {
   const DeviceConfig& config = configStoreGet();
-  char message[96];
-  snprintf(message, sizeof(message), "wifi_connect ssid=%s", config.wifiSsid);
+  const char* hostname = config.hostname[0] != '\0' ? config.hostname : "";
+  char message[128];
+  snprintf(message, sizeof(message), "wifi_connect ssid=%s hostname=%s", config.wifiSsid, hostname[0] != '\0' ? hostname : "default");
   logInfo(message);
 
+  WiFi.mode(WIFI_MODE_NULL);
+  if (config.hostname[0] != '\0') {
+    WiFi.setHostname(config.hostname);
+  }
   WiFi.mode(WIFI_STA);
   WiFi.begin(config.wifiSsid, config.wifiPassword);
 }
@@ -38,6 +44,19 @@ void wifiManagerBegin() {
 }
 
 void wifiManagerPoll(uint32_t nowMs) {
+  if (reconnectRequested) {
+    reconnectRequested = false;
+    if (hasWifiCredentials()) {
+      logInfo("wifi_reconnect=requested");
+      WiFi.disconnect(false);
+      WiFi.mode(WIFI_MODE_NULL);
+      wifiCore.requestReconnect(true, nowMs);
+    } else {
+      logWarn("wifi_reconnect=unconfigured");
+      wifiCore.requestReconnect(false, nowMs);
+    }
+  }
+
   const WifiManagerStatus previousStatus = wifiCore.status();
   wifiCore.poll(WiFi.status() == WL_CONNECTED, nowMs);
 
@@ -48,12 +67,19 @@ void wifiManagerPoll(uint32_t nowMs) {
     if (wifiCore.status() == WifiManagerStatus::Connected) {
       snprintf(message, sizeof(message), "wifi_ip=%s", WiFi.localIP().toString().c_str());
       logInfo(message);
+      snprintf(message, sizeof(message), "wifi_hostname=%s", wifiManagerHostname());
+      logInfo(message);
     }
   }
 
   if (wifiCore.consumeConnectRequest()) {
     startWifiConnection();
   }
+}
+
+bool wifiManagerRequestReconnect() {
+  reconnectRequested = true;
+  return hasWifiCredentials();
 }
 
 bool wifiManagerIsConfigured() {
@@ -85,4 +111,9 @@ const char* wifiManagerStatusName() {
 
 IPAddress wifiManagerLocalIp() {
   return WiFi.localIP();
+}
+
+const char* wifiManagerHostname() {
+  const char* hostname = WiFi.getHostname();
+  return hostname != nullptr ? hostname : "";
 }

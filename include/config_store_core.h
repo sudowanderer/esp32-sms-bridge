@@ -7,6 +7,7 @@ struct DeviceConfig {
   uint16_t version;
   char wifiSsid[64];
   char wifiPassword[96];
+  char hostname[32];
   char barkServerUrl[128];
   char barkDeviceKey[96];
 };
@@ -14,6 +15,7 @@ struct DeviceConfig {
 struct DeviceConfigFallback {
   const char* wifiSsid;
   const char* wifiPassword;
+  const char* hostname;
   const char* barkServerUrl;
   const char* barkDeviceKey;
 };
@@ -27,5 +29,6 @@ class ConfigStoreCore {
   static void sanitize(DeviceConfig& config);
   static bool hasWifiConfig(const DeviceConfig& config);
   static bool hasBarkConfig(const DeviceConfig& config);
+  static bool isValidHostname(const char* hostname);
   static void copyString(char* destination, size_t destinationSize, const char* source);
 };

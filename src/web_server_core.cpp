@@ -410,6 +410,12 @@ bool webBuildStatusJson(const WebStatusSnapshot& status, char* output, size_t ou
   writer.appendEscaped(status.wifiStatus);
   writer.append("\",\"ip\":\"");
   writer.appendEscaped(status.wifiIp);
+  writer.append("\",\"configured_hostname\":\"");
+  writer.appendEscaped(status.wifiConfiguredHostname);
+  writer.append("\",\"active_hostname\":\"");
+  writer.appendEscaped(status.wifiActiveHostname);
+  writer.append("\",\"hostname\":\"");
+  writer.appendEscaped(status.wifiActiveHostname);
   writer.append("\"},");
   writer.appendFormat("\"forwarder_http\":{\"configured\":%s,\"status\":\"", boolJson(status.forwarderConfigured));
   writer.appendEscaped(status.forwarderStatus);
@@ -453,6 +459,7 @@ static bool appendPageScript(JsonWriter& writer, WebPageKind page) {
           "function sig(q){return ['excellent','good','fair','weak'].includes(q)?q:'unknown';}"
           "async function load(){const r=await fetch('/api/status');const j=await r.json();"
           "$('uptime').textContent=fmtMs(j.uptime_ms);$('heap').textContent=j.free_heap;"
+          "$('wifi_cfg_hostname').textContent=j.wifi.configured_hostname||'default';$('wifi_active_hostname').textContent=val(j.wifi.active_hostname);"
           "$('wifi').textContent=j.wifi.status+(j.wifi.ip?' / '+j.wifi.ip:'');"
           "$('modem').textContent=(j.modem.busy?'busy':'idle')+' / queue '+j.modem.queue_depth;"
           "$('modem_sim').textContent=j.modem_events.sim_state;$('modem_sim_removed').textContent=j.modem_events.sim_removed_count;$('modem_last_event').textContent=val(j.modem_events.last_event);$('modem_matready').textContent=j.modem_events.matready_count;"
@@ -470,9 +477,10 @@ static bool appendPageScript(JsonWriter& writer, WebPageKind page) {
       writer.append(
           "<script>"
           "const $=id=>document.getElementById(id);"
-          "async function load(){const r=await fetch('/api/config');const j=await r.json();$('wifi_ssid').value=j.wifi.ssid;$('bark_server_url').value=j.bark.server_url;$('wifi_set').textContent=j.wifi.password_set?'set':'not set';$('bark_set').textContent=j.bark.device_key_set?'set':'not set';}"
-          "async function save(e){e.preventDefault();const body={wifi_ssid:$('wifi_ssid').value,bark_server_url:$('bark_server_url').value};if($('wifi_password').value)body.wifi_password=$('wifi_password').value;if($('bark_device_key').value)body.bark_device_key=$('bark_device_key').value;const r=await fetch('/api/config/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});$('result').textContent=r.ok?'saved':'save failed';if(r.ok){$('wifi_password').value='';$('bark_device_key').value='';load();}}"
-          "document.getElementById('cfg').addEventListener('submit',save);load();"
+          "async function load(){const r=await fetch('/api/config');const j=await r.json();$('wifi_ssid').value=j.wifi.ssid;$('hostname').value=j.hostname;$('bark_server_url').value=j.bark.server_url;$('wifi_set').textContent=j.wifi.password_set?'set':'not set';$('bark_set').textContent=j.bark.device_key_set?'set':'not set';}"
+          "async function save(e){e.preventDefault();const body={wifi_ssid:$('wifi_ssid').value,hostname:$('hostname').value,bark_server_url:$('bark_server_url').value};if($('wifi_password').value)body.wifi_password=$('wifi_password').value;if($('bark_device_key').value)body.bark_device_key=$('bark_device_key').value;const r=await fetch('/api/config/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});$('result').textContent=r.ok?'saved':'save failed';if(r.ok){$('wifi_password').value='';$('bark_device_key').value='';load();}}"
+          "async function reconnect(){const r=await fetch('/api/wifi/reconnect',{method:'POST'});$('result').textContent=r.ok?'wifi reconnect queued':'wifi reconnect failed';}"
+          "document.getElementById('cfg').addEventListener('submit',save);document.getElementById('wifi_reconnect').addEventListener('click',reconnect);load();"
           "</script>");
       return writer.ok();
     case WebPageKind::Queue:
@@ -545,6 +553,8 @@ bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize) {
           "<tr><td>Logs</td><td id=\"logs\">loading</td></tr>"
           "</table></section>"
           "<section><h2>Network</h2><table>"
+          "<tr><td>Configured hostname</td><td id=\"wifi_cfg_hostname\">loading</td></tr>"
+          "<tr><td>Active hostname</td><td id=\"wifi_active_hostname\">loading</td></tr>"
           "<tr><td>WiFi</td><td id=\"wifi\">loading</td></tr>"
           "<tr><td>Modem AT</td><td id=\"modem\">loading</td></tr>"
           "</table></section>"
@@ -578,6 +588,9 @@ bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize) {
           "<section><h2>Configuration</h2><form id=\"cfg\">"
           "<label for=\"wifi_ssid\">WiFi SSID</label><input id=\"wifi_ssid\" name=\"wifi_ssid\">"
           "<label for=\"wifi_password\">WiFi password <span class=\"hint\">current: <span id=\"wifi_set\">loading</span>, leave blank to keep</span></label><input id=\"wifi_password\" name=\"wifi_password\" type=\"password\">"
+          "<label for=\"hostname\">Hostname</label><input id=\"hostname\" name=\"hostname\">"
+          "<p class=\"hint\">Hostname changes take effect after WiFi reconnect or reboot.</p>"
+          "<button id=\"wifi_reconnect\" type=\"button\">Reconnect WiFi</button>"
           "<label for=\"bark_server_url\">Bark server URL</label><input id=\"bark_server_url\" name=\"bark_server_url\">"
           "<label for=\"bark_device_key\">Bark device key <span class=\"hint\">current: <span id=\"bark_set\">loading</span>, leave blank to keep</span></label><input id=\"bark_device_key\" name=\"bark_device_key\" type=\"password\">"
           "<button type=\"submit\">Save</button> <span id=\"result\" class=\"hint\"></span>"
@@ -637,6 +650,9 @@ bool webBuildConfigJson(const DeviceConfig& config, char* output, size_t outputS
   writer.appendFormat("\"wifi\":{\"configured\":%s,\"ssid\":\"", boolJson(ConfigStoreCore::hasWifiConfig(config)));
   writer.appendEscaped(config.wifiSsid);
   writer.appendFormat("\",\"password_set\":%s},", boolJson(config.wifiPassword[0] != '\0'));
+  writer.append("\"hostname\":\"");
+  writer.appendEscaped(config.hostname);
+  writer.append("\",");
   writer.appendFormat("\"bark\":{\"configured\":%s,\"server_url\":\"", boolJson(ConfigStoreCore::hasBarkConfig(config)));
   writer.appendEscaped(config.barkServerUrl);
   writer.appendFormat("\",\"device_key_set\":%s}", boolJson(config.barkDeviceKey[0] != '\0'));
@@ -660,6 +676,14 @@ WebConfigParseResult webParseConfigSaveJson(const char* json, DeviceConfig& conf
   result = extractJsonStringField(json, "wifi_password", next.wifiPassword, sizeof(next.wifiPassword), found);
   if (result != WebConfigParseResult::Ok) {
     return result;
+  }
+
+  result = extractJsonStringField(json, "hostname", next.hostname, sizeof(next.hostname), found);
+  if (result != WebConfigParseResult::Ok) {
+    return result;
+  }
+  if (!ConfigStoreCore::isValidHostname(next.hostname)) {
+    return WebConfigParseResult::InvalidHostname;
   }
 
   result = extractJsonStringField(json, "bark_server_url", next.barkServerUrl, sizeof(next.barkServerUrl), found);

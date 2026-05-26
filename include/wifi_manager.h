@@ -7,9 +7,11 @@
 
 void wifiManagerBegin();
 void wifiManagerPoll(uint32_t nowMs);
+bool wifiManagerRequestReconnect();
 
 bool wifiManagerIsConfigured();
 bool wifiManagerIsConnected();
 WifiManagerStatus wifiManagerStatus();
 const char* wifiManagerStatusName();
 IPAddress wifiManagerLocalIp();
+const char* wifiManagerHostname();

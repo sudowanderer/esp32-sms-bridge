@@ -15,6 +15,7 @@ class WifiManagerCore {
 
   void begin(bool hasCredentials, uint32_t nowMs);
   void poll(bool stationConnected, uint32_t nowMs);
+  void requestReconnect(bool hasCredentials, uint32_t nowMs);
 
   bool consumeConnectRequest();
 

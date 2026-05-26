@@ -64,6 +64,30 @@ void test_failed_connecting_state_retries_on_interval() {
   TEST_ASSERT_TRUE(wifi.consumeConnectRequest());
 }
 
+void test_manual_reconnect_requests_immediate_connection() {
+  WifiManagerCore wifi;
+  wifi.begin(true, 100);
+  TEST_ASSERT_TRUE(wifi.consumeConnectRequest());
+  wifi.poll(true, 200);
+  TEST_ASSERT_EQUAL(WifiManagerStatus::Connected, wifi.status());
+
+  wifi.requestReconnect(true, 500);
+
+  TEST_ASSERT_EQUAL(WifiManagerStatus::Connecting, wifi.status());
+  TEST_ASSERT_TRUE(wifi.consumeConnectRequest());
+  TEST_ASSERT_EQUAL_UINT32(500, wifi.lastConnectAttemptMs());
+}
+
+void test_manual_reconnect_without_credentials_becomes_unconfigured() {
+  WifiManagerCore wifi;
+  wifi.begin(true, 100);
+
+  wifi.requestReconnect(false, 500);
+
+  TEST_ASSERT_EQUAL(WifiManagerStatus::Unconfigured, wifi.status());
+  TEST_ASSERT_FALSE(wifi.consumeConnectRequest());
+}
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -74,5 +98,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_connected_status_tracks_successful_station_connection);
   RUN_TEST(test_disconnect_waits_for_retry_interval_before_reconnecting);
   RUN_TEST(test_failed_connecting_state_retries_on_interval);
+  RUN_TEST(test_manual_reconnect_requests_immediate_connection);
+  RUN_TEST(test_manual_reconnect_without_credentials_becomes_unconfigured);
   return UNITY_END();
 }

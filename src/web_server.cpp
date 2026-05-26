@@ -12,6 +12,7 @@
 
 #include <Arduino.h>
 #include <WebServer.h>
+#include <string.h>
 
 static WebServer server(80);
 static bool started = false;
@@ -39,6 +40,8 @@ static const char* configParseErrorName(WebConfigParseResult result) {
       return "invalid_json";
     case WebConfigParseResult::ValueTooLong:
       return "value_too_long";
+    case WebConfigParseResult::InvalidHostname:
+      return "invalid_hostname";
   }
 
   return "invalid_config";
@@ -61,6 +64,7 @@ static uint16_t requestedLimit(uint16_t defaultLimit, uint16_t maxLimit) {
 
 static void handleStatus() {
   WebStatusSnapshot snapshot = {};
+  const DeviceConfig& config = configStoreGet();
   CellularStatusSnapshot cellular = cellularStatusGet();
   snapshot.uptimeMs = millis();
   snapshot.freeHeap = ESP.getFreeHeap();
@@ -109,6 +113,8 @@ static void handleStatus() {
   if (wifiManagerIsConnected()) {
     snprintf(snapshot.wifiIp, sizeof(snapshot.wifiIp), "%s", wifiManagerLocalIp().toString().c_str());
   }
+  snprintf(snapshot.wifiConfiguredHostname, sizeof(snapshot.wifiConfiguredHostname), "%s", config.hostname);
+  snprintf(snapshot.wifiActiveHostname, sizeof(snapshot.wifiActiveHostname), "%s", wifiManagerHostname());
   snapshot.forwarderConfigured = forwarderHttpIsConfigured();
   snprintf(snapshot.forwarderStatus, sizeof(snapshot.forwarderStatus), "%s", forwarderHttpStatusName());
   snapshot.forwarderLastCode = forwarderHttpLastCode();
@@ -207,7 +213,8 @@ static void handleConfigGet() {
 
 static void handleConfigSave() {
   const String body = server.arg("plain");
-  DeviceConfig config = configStoreGet();
+  const DeviceConfig previousConfig = configStoreGet();
+  DeviceConfig config = previousConfig;
   const WebConfigParseResult parseResult = webParseConfigSaveJson(body.c_str(), config);
   if (parseResult != WebConfigParseResult::Ok) {
     logWarn("web_config_status=invalid_request");
@@ -222,13 +229,33 @@ static void handleConfigSave() {
   }
 
   logInfo("web_config_status=saved");
+  const bool reconnectRequired = strcmp(previousConfig.hostname, configStoreGet().hostname) != 0;
+  if (reconnectRequired) {
+    logInfo("wifi_hostname_status=changed reconnect_required");
+  }
+
   char response[512];
-  if (!webBuildConfigJson(configStoreGet(), response, sizeof(response))) {
+  char configJson[512];
+  if (!webBuildConfigJson(configStoreGet(), configJson, sizeof(configJson))) {
+    sendJsonError(500, "config_json_too_large");
+    return;
+  }
+  const int written = snprintf(response,
+                               sizeof(response),
+                               "{\"config\":%s,\"restart_or_reconnect_required\":%s}",
+                               configJson,
+                               reconnectRequired ? "true" : "false");
+  if (written < 0 || static_cast<size_t>(written) >= sizeof(response)) {
     sendJsonError(500, "config_json_too_large");
     return;
   }
 
   sendJsonBuffer(response);
+}
+
+static void handleWifiReconnect() {
+  const bool accepted = wifiManagerRequestReconnect();
+  server.send(accepted ? 202 : 409, "application/json", accepted ? "{\"status\":\"queued\"}" : "{\"error\":\"wifi_unconfigured\"}");
 }
 
 void webServerBegin() {
@@ -241,6 +268,7 @@ void webServerBegin() {
   server.on("/api/queue", HTTP_GET, handleQueue);
   server.on("/api/config", HTTP_GET, handleConfigGet);
   server.on("/api/config/save", HTTP_POST, handleConfigSave);
+  server.on("/api/wifi/reconnect", HTTP_POST, handleWifiReconnect);
   server.on("/", HTTP_GET, []() {
     handlePage(WebPageKind::Status);
   });

@@ -44,6 +44,20 @@ void WifiManagerCore::poll(bool stationConnected, uint32_t nowMs) {
   }
 }
 
+void WifiManagerCore::requestReconnect(bool hasCredentials, uint32_t nowMs) {
+  hasCredentials_ = hasCredentials;
+  connectRequested_ = false;
+  lastConnectAttemptMs_ = nowMs;
+
+  if (!hasCredentials_) {
+    status_ = WifiManagerStatus::Unconfigured;
+    return;
+  }
+
+  status_ = WifiManagerStatus::Connecting;
+  connectRequested_ = true;
+}
+
 bool WifiManagerCore::consumeConnectRequest() {
   if (!connectRequested_) {
     return false;

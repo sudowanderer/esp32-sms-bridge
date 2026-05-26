@@ -23,6 +23,7 @@ static constexpr const char* kSavedKey = "saved";
 static constexpr const char* kVersionKey = "version";
 static constexpr const char* kWifiSsidKey = "wifi_ssid";
 static constexpr const char* kWifiPasswordKey = "wifi_pass";
+static constexpr const char* kHostnameKey = "hostname";
 static constexpr const char* kBarkServerUrlKey = "bark_url";
 static constexpr const char* kBarkDeviceKeyKey = "bark_key";
 
@@ -35,6 +36,7 @@ static DeviceConfigFallback localFallback() {
   DeviceConfigFallback fallback = {};
   fallback.wifiSsid = WIFI_SSID;
   fallback.wifiPassword = WIFI_PASSWORD;
+  fallback.hostname = "";
   fallback.barkServerUrl = PUSH_BARK_SERVER_URL;
   fallback.barkDeviceKey = PUSH_BARK_DEVICE_KEY;
   return fallback;
@@ -100,6 +102,7 @@ bool configStoreLoad(DeviceConfig& config) {
   config.version = preferences.getUShort(kVersionKey, ConfigStoreCore::kCurrentVersion);
   readString(kWifiSsidKey, config.wifiSsid, sizeof(config.wifiSsid));
   readString(kWifiPasswordKey, config.wifiPassword, sizeof(config.wifiPassword));
+  readString(kHostnameKey, config.hostname, sizeof(config.hostname));
   readString(kBarkServerUrlKey, config.barkServerUrl, sizeof(config.barkServerUrl));
   readString(kBarkDeviceKeyKey, config.barkDeviceKey, sizeof(config.barkDeviceKey));
   ConfigStoreCore::sanitize(config);
@@ -118,6 +121,7 @@ bool configStoreSave(const DeviceConfig& config) {
   ok = preferences.putUShort(kVersionKey, clean.version) > 0 && ok;
   ok = writeString(kWifiSsidKey, clean.wifiSsid) && ok;
   ok = writeString(kWifiPasswordKey, clean.wifiPassword) && ok;
+  ok = writeString(kHostnameKey, clean.hostname) && ok;
   ok = writeString(kBarkServerUrlKey, clean.barkServerUrl) && ok;
   ok = writeString(kBarkDeviceKeyKey, clean.barkDeviceKey) && ok;
   ok = preferences.putBool(kSavedKey, true) > 0 && ok;
