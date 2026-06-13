@@ -7,6 +7,7 @@
 static constexpr uint8_t kModemRxPin = 4;
 static constexpr uint8_t kModemTxPin = 3;
 static constexpr uint32_t kModemBaud = 115200;
+static constexpr size_t kModemRxBufferSize = 4096;
 
 static ModemAtCore modemAtCore;
 
@@ -16,6 +17,7 @@ static void writeSerial1(const char* data, void* userData) {
 }
 
 void modemAtBegin() {
+  Serial1.setRxBufferSize(kModemRxBufferSize);
   Serial1.begin(kModemBaud, SERIAL_8N1, kModemRxPin, kModemTxPin);
   modemAtCore.begin(millis());
 }

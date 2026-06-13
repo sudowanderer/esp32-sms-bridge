@@ -8,6 +8,7 @@ void test_static_commands_have_business_names() {
   TEST_ASSERT_EQUAL_STRING("AT", ModemCommands::attention());
   TEST_ASSERT_EQUAL_STRING("AT+CMGF=0", ModemCommands::smsPduMode());
   TEST_ASSERT_EQUAL_STRING("AT+CNMI=2,2,0,0,0", ModemCommands::smsDirectUrcMode());
+  TEST_ASSERT_EQUAL_STRING("AT+CNMI?", ModemCommands::querySmsUrcMode());
   TEST_ASSERT_EQUAL_STRING("AT+CEREG?", ModemCommands::queryRegistration());
   TEST_ASSERT_EQUAL_STRING("AT+CSQ", ModemCommands::querySignal());
   TEST_ASSERT_EQUAL_STRING("ATI", ModemCommands::queryModuleInfo());

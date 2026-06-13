@@ -8,6 +8,7 @@ namespace ModemCommands {
 const char* attention();
 const char* smsPduMode();
 const char* smsDirectUrcMode();
+const char* querySmsUrcMode();
 const char* queryRegistration();
 const char* querySignal();
 const char* queryModuleInfo();

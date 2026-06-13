@@ -10,6 +10,7 @@
 #include "pdp_guard_core.h"
 #include "serial_at_console.h"
 #include "sms_queue.h"
+#include "sms_receive_watchdog.h"
 #include "sms_receiver.h"
 #include "sms_storage_reader_core.h"
 #include "startup_sequencer_core.h"
@@ -30,8 +31,13 @@ static bool storedPduQueued = false;
 static SmsMessage storedPduDecodedMessage;
 static StartupSequencerCore startupSequencer;
 static PdpGuardCore pdpGuard;
+static SmsReceiveWatchdogCore smsReceiveWatchdog;
 static bool startupSequencerWasComplete = false;
 static bool startupMatreadySeenLogged = false;
+
+SmsReceiveWatchdogSnapshot smsReceiveWatchdogGetSnapshot() {
+  return smsReceiveWatchdog.snapshot();
+}
 
 static void printAtResult(ModemAtResult result, const char* response, void* userData) {
   const char* command = static_cast<const char*>(userData);
@@ -165,6 +171,7 @@ static void handleModemUrc(const char* line, void* userData) {
   const bool trackedModemEvent = modemEventsOnUrc(line, now);
 
   startupSequencer.onUrc(line, millis());
+  smsReceiveWatchdog.onUrc(line, now);
   if (strcmp(line, "+MATREADY") == 0 && !startupMatreadySeenLogged) {
     startupMatreadySeenLogged = true;
     logInfo("startup_at_status=matready_seen");
@@ -323,6 +330,7 @@ static void pollStartupSequencer(uint32_t now) {
       startupSequencerWasComplete = true;
       cellularStatusSetStartupComplete(true);
       pdpGuard.setStartupComplete(true, now);
+      smsReceiveWatchdog.setStartupComplete(true, now);
       logInfo("startup_at_status=complete");
     }
     return;
@@ -385,6 +393,71 @@ static void pollPdpGuard(uint32_t now) {
   pdpGuard.markSubmitted();
 }
 
+static void handleSmsReceiveWatchdogResult(ModemAtResult result, const char* response, void* userData) {
+  const char* command = static_cast<const char*>(userData);
+  const uint32_t now = millis();
+  smsReceiveWatchdog.complete(result, response, now);
+
+  const char* resultName = "unknown";
+  switch (result) {
+    case ModemAtResult::Ok:
+      resultName = "ok";
+      break;
+    case ModemAtResult::Error:
+      resultName = "error";
+      break;
+    case ModemAtResult::Timeout:
+      resultName = "timeout";
+      break;
+    case ModemAtResult::QueueFull:
+      resultName = "queue_full";
+      break;
+  }
+
+  char message[128];
+  const bool statusQuery = command != nullptr && strcmp(command, ModemCommands::querySmsUrcMode()) == 0;
+  if (statusQuery) {
+    const SmsReceiveWatchdogSnapshot snapshot = smsReceiveWatchdog.snapshot();
+    snprintf(message,
+             sizeof(message),
+             "sms_rx_status command=%s result=%s cnmi=%s",
+             command,
+             resultName,
+             snapshot.cnmiKnown ? snapshot.cnmiRaw : "unknown");
+  } else {
+    snprintf(message,
+             sizeof(message),
+             "sms_rx_config command=%s result=%s last_config_ms=%lu recoveries=%u",
+             command != nullptr ? command : "",
+             resultName,
+             static_cast<unsigned long>(smsReceiveWatchdog.lastConfigMs()),
+             static_cast<unsigned>(smsReceiveWatchdog.recoveryCount()));
+  }
+  if (result == ModemAtResult::Ok) {
+    logInfo(message);
+  } else {
+    logWarn(message);
+  }
+}
+
+static void pollSmsReceiveWatchdog(uint32_t now) {
+  const char* command = smsReceiveWatchdog.commandToSubmit(now);
+  if (command == nullptr) {
+    return;
+  }
+
+  if (!modemAtSubmit(command, kCommandTimeoutMs, handleSmsReceiveWatchdogResult, const_cast<char*>(command))) {
+    smsReceiveWatchdog.deferSubmission(now);
+    char message[96];
+    const char* prefix = strcmp(command, ModemCommands::querySmsUrcMode()) == 0 ? "sms_rx_status" : "sms_rx_config";
+    snprintf(message, sizeof(message), "%s command=%s result=queue_full", prefix, command);
+    logWarn(message);
+    return;
+  }
+
+  smsReceiveWatchdog.markSubmitted(now);
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -421,6 +494,7 @@ void setup() {
   serialAtConsoleBegin();
   startupSequencer.begin(millis());
   pdpGuard.begin();
+  smsReceiveWatchdog.begin(millis());
   startupSequencerWasComplete = false;
   startupMatreadySeenLogged = false;
   cellularStatusSetStartupComplete(false);
@@ -435,6 +509,7 @@ void loop() {
   const uint32_t now = millis();
   modemEventsPoll(now);
   pollStartupSequencer(now);
+  pollSmsReceiveWatchdog(now);
   pollPdpGuard(now);
   cellularStatusPoll(now);
   wifiManagerPoll(millis());
@@ -454,6 +529,10 @@ void loop() {
     Serial.print(modemAtQueueDepth());
     Serial.print(" sms_queue_pending=");
     Serial.print(smsQueuePendingCount());
+    Serial.print(" sms_rx_last_config_ms=");
+    Serial.print(smsReceiveWatchdog.lastConfigMs());
+    Serial.print(" sms_rx_recoveries=");
+    Serial.print(smsReceiveWatchdog.recoveryCount());
     Serial.print(" wifi_status=");
     Serial.print(wifiManagerStatusName());
     if (wifiManagerIsConnected()) {

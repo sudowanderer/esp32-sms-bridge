@@ -404,6 +404,11 @@ bool webBuildStatusJson(const WebStatusSnapshot& status, char* output, size_t ou
   writer.appendEscaped(status.cellularApn);
   writer.appendFormat("\",\"last_updated_ms\":%lu},", static_cast<unsigned long>(status.cellularLastUpdatedMs));
   writer.appendFormat("\"sms_queue\":{\"depth\":%u,\"pending\":%u},", status.smsQueueDepth, status.smsQueuePending);
+  writer.appendFormat("\"sms_rx\":{\"cnmi_known\":%s,\"cnmi_raw\":\"", boolJson(status.smsCnmiKnown));
+  writer.appendEscaped(status.smsCnmiRaw);
+  writer.append("\",\"cnmi_description\":\"");
+  writer.appendEscaped(status.smsCnmiDescription);
+  writer.appendFormat("\",\"cnmi_last_updated_ms\":%lu},", static_cast<unsigned long>(status.smsCnmiLastUpdatedMs));
   writer.appendFormat("\"wifi\":{\"configured\":%s,\"connected\":%s,\"status\":\"",
                       boolJson(status.wifiConfigured),
                       boolJson(status.wifiConnected));
@@ -466,6 +471,7 @@ static bool appendPageScript(JsonWriter& writer, WebPageKind page) {
           "$('modem_mfr').textContent=val(j.cellular.manufacturer);$('modem_model').textContent=val(j.cellular.model);$('modem_fw').textContent=val(j.cellular.firmware);"
           "const q=sig(j.cellular.rsrp_quality);$('signal_icon').className='signal-icon signal-'+q;$('modem_rsrp_text').textContent=j.cellular.lte_signal_known?j.cellular.rsrp_dbm+' dBm ('+j.cellular.rsrp_quality+')':'unknown';$('modem_rsrq').textContent=j.cellular.lte_signal_known?rsrq(j.cellular.rsrq_db_tenths):'unknown';$('modem_cesq').textContent=val(j.cellular.cesq_raw);"
           "$('modem_imsi').textContent=val(j.cellular.imsi);$('modem_iccid').textContent=val(j.cellular.iccid);$('modem_num').textContent=val(j.cellular.own_number);"
+          "$('modem_cnmi').textContent=j.sms_rx.cnmi_known?j.sms_rx.cnmi_raw+' ('+j.sms_rx.cnmi_description+')':'unknown';"
           "$('modem_reg').textContent=val(j.cellular.registration);$('modem_op').textContent=val(j.cellular.operator);$('modem_data').textContent=j.cellular.data_connection_known?(j.cellular.data_connection_active?'active':'inactive'):'unknown';$('modem_apn').textContent=val(j.cellular.apn);$('modem_updated').textContent=ago(j.uptime_ms,j.cellular.last_updated_ms);"
           "$('sms').textContent='depth '+j.sms_queue.depth+' / pending '+j.sms_queue.pending;"
           "$('push').textContent=j.forwarder_http.status+' / code '+j.forwarder_http.last_code;"
@@ -572,6 +578,7 @@ bool webBuildPageHtml(WebPageKind page, char* output, size_t outputSize) {
           "<tr><td>IMSI</td><td id=\"modem_imsi\">loading</td></tr>"
           "<tr><td>ICCID</td><td id=\"modem_iccid\">loading</td></tr>"
           "<tr><td>Own number</td><td id=\"modem_num\">loading</td></tr>"
+          "<tr><td>SMS auto report</td><td id=\"modem_cnmi\">loading</td></tr>"
           "<tr><td>Registration</td><td id=\"modem_reg\">loading</td></tr>"
           "<tr><td>Operator</td><td id=\"modem_op\">loading</td></tr>"
           "<tr><td>Data connection</td><td id=\"modem_data\">loading</td></tr>"

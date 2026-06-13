@@ -64,6 +64,12 @@ void test_status_json_contains_runtime_state() {
   status.cellularLastUpdatedMs = 9000;
   status.smsQueueDepth = 3;
   status.smsQueuePending = 1;
+  status.smsCnmiKnown = true;
+  strncpy(status.smsCnmiRaw, "2,2,0,0,0", sizeof(status.smsCnmiRaw) - 1);
+  strncpy(status.smsCnmiDescription,
+          "mode 2: buffer while busy; mt 2: direct SMS PDU via +CMT",
+          sizeof(status.smsCnmiDescription) - 1);
+  status.smsCnmiLastUpdatedMs = 9100;
   status.wifiConfigured = true;
   status.wifiConnected = true;
   strncpy(status.wifiStatus, "connected", sizeof(status.wifiStatus) - 1);
@@ -76,7 +82,7 @@ void test_status_json_contains_runtime_state() {
   strncpy(status.forwarderLastError, "", sizeof(status.forwarderLastError) - 1);
   status.loggerCount = 7;
 
-  char output[1536];
+  char output[2048];
   TEST_ASSERT_TRUE(webBuildStatusJson(status, output, sizeof(output)));
 
   TEST_ASSERT_NOT_NULL(strstr(output, "\"uptime_ms\":12345"));
@@ -102,6 +108,7 @@ void test_status_json_contains_runtime_state() {
   TEST_ASSERT_NOT_NULL(strstr(output, "\"apn\":\"EXAMPLE.APN\""));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"last_updated_ms\":9000"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"sms_queue\":{\"depth\":3,\"pending\":1}"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "\"sms_rx\":{\"cnmi_known\":true,\"cnmi_raw\":\"2,2,0,0,0\",\"cnmi_description\":\"mode 2: buffer while busy; mt 2: direct SMS PDU via +CMT\",\"cnmi_last_updated_ms\":9100}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"wifi\":{\"configured\":true,\"connected\":true,\"status\":\"connected\",\"ip\":\"192.168.1.20\",\"configured_hostname\":\"sms-bridge\",\"active_hostname\":\"sms-bridge-active\",\"hostname\":\"sms-bridge-active\"}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"forwarder_http\":{\"configured\":true,\"status\":\"last_success\",\"last_code\":200,\"last_error\":\"\"}"));
   TEST_ASSERT_NOT_NULL(strstr(output, "\"logs\":{\"count\":7}"));
@@ -279,6 +286,8 @@ void test_status_page_contains_openwrt_style_dashboard_hooks() {
   TEST_ASSERT_NOT_NULL(strstr(output, "SIM state"));
   TEST_ASSERT_NOT_NULL(strstr(output, "SIM removed count"));
   TEST_ASSERT_NOT_NULL(strstr(output, "MATREADY count"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "SMS auto report"));
+  TEST_ASSERT_NOT_NULL(strstr(output, "modem_cnmi"));
   TEST_ASSERT_NULL(strstr(output, "4G Modem"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Manufacturer"));
   TEST_ASSERT_NOT_NULL(strstr(output, "Signal RSRP"));
