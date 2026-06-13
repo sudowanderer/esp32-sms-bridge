@@ -35,6 +35,10 @@ const char* smsDirectUrcMode() {
   return "AT+CNMI=2,2,0,0,0";
 }
 
+const char* querySmsUrcMode() {
+  return "AT+CNMI?";
+}
+
 const char* queryRegistration() {
   return "AT+CEREG?";
 }

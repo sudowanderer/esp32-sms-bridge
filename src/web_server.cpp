@@ -7,6 +7,7 @@
 #include "modem_at.h"
 #include "modem_events.h"
 #include "sms_queue.h"
+#include "sms_receive_watchdog.h"
 #include "web_server_core.h"
 #include "wifi_manager.h"
 
@@ -107,6 +108,11 @@ static void handleStatus() {
   snapshot.cellularLastUpdatedMs = cellular.lastUpdatedMs;
   snapshot.smsQueueDepth = smsQueueDepth();
   snapshot.smsQueuePending = smsQueuePendingCount();
+  const SmsReceiveWatchdogSnapshot smsRx = smsReceiveWatchdogGetSnapshot();
+  snapshot.smsCnmiKnown = smsRx.cnmiKnown;
+  snprintf(snapshot.smsCnmiRaw, sizeof(snapshot.smsCnmiRaw), "%s", smsRx.cnmiRaw);
+  snprintf(snapshot.smsCnmiDescription, sizeof(snapshot.smsCnmiDescription), "%s", smsRx.cnmiDescription);
+  snapshot.smsCnmiLastUpdatedMs = smsRx.cnmiLastUpdatedMs;
   snapshot.wifiConfigured = wifiManagerIsConfigured();
   snapshot.wifiConnected = wifiManagerIsConnected();
   snprintf(snapshot.wifiStatus, sizeof(snapshot.wifiStatus), "%s", wifiManagerStatusName());
@@ -121,7 +127,7 @@ static void handleStatus() {
   snprintf(snapshot.forwarderLastError, sizeof(snapshot.forwarderLastError), "%s", forwarderHttpLastError());
   snapshot.loggerCount = loggerCount();
 
-  char response[2048];
+  char response[3072];
   if (!webBuildStatusJson(snapshot, response, sizeof(response))) {
     sendJsonError(500, "status_json_too_large");
     return;

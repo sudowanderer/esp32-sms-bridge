@@ -45,6 +45,10 @@ struct WebStatusSnapshot {
   uint32_t cellularLastUpdatedMs;
   uint8_t smsQueueDepth;
   uint8_t smsQueuePending;
+  bool smsCnmiKnown;
+  char smsCnmiRaw[24];
+  char smsCnmiDescription[160];
+  uint32_t smsCnmiLastUpdatedMs;
   bool wifiConfigured;
   bool wifiConnected;
   char wifiStatus[24];
